@@ -1,0 +1,30 @@
+{
+  "name": "translator-qa",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Public Playwright E2E + API test suite for the MemDecks / Translator language-learning app (runs against test.memdecks.com).",
+  "scripts": {
+    "test": "playwright test",
+    "test:safe": "playwright test --project=chromium tests/unauth tests/api",
+    "test:auth": "playwright test --project=auth-tests",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "codegen": "playwright codegen",
+    "typecheck": "tsc --noEmit",
+    "pw:install": "playwright install --with-deps chromium"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.10.2",
+    "dotenv": "^17.4.1",
+    "typescript": "^5.6.3"
+  }
+}
