@@ -29,8 +29,13 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('')`. */
     baseURL: process.env.TEST_BASE_URL ?? 'http://localhost:3000/',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* Visual artifacts: a scrubbable trace (DOM snapshots per step), a final
+     * screenshot, and a video recording for every test. These power the rich,
+     * embedded report in the portfolio's "Live QA Lab". Tune down (e.g.
+     * 'retain-on-failure') if storage / run time becomes a concern. */
+    trace: 'on',
+    screenshot: 'on',
+    video: 'on',
   },
 
   /* Configure projects for major browsers */

@@ -13,7 +13,8 @@
     "report": "playwright show-report",
     "codegen": "playwright codegen",
     "typecheck": "tsc --noEmit",
-    "pw:install": "playwright install --with-deps chromium"
+    "pw:install": "playwright install --with-deps chromium",
+    "serve": "node runner/server.mjs"
   },
   "engines": {
     "node": ">=20"
