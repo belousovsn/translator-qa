@@ -1,5 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import WebSocket from 'ws'
 import { TEST_BASE_URL } from '../src/config.js'
+
+// Node < 22 has no global WebSocket, which @supabase/realtime-js needs when the
+// client is constructed. Provide the `ws` implementation as the transport.
+const realtimeTransport = WebSocket as unknown as typeof globalThis.WebSocket
 
 /**
  * Lazily build a Supabase client using the PUBLIC anon config exposed by the
@@ -24,6 +29,8 @@ export async function getSupabase(): Promise<SupabaseClient> {
         throw new Error('SUPABASE_KEY is missing')
     }
 
-    cached = createClient(data.SUPABASE_URL, data.SUPABASE_KEY)
+    cached = createClient(data.SUPABASE_URL, data.SUPABASE_KEY, {
+        realtime: { transport: realtimeTransport },
+    })
     return cached
 }

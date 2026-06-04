@@ -1,7 +1,11 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import WebSocket from 'ws'
 import type { Card, Translation } from '../../src/types.js'
 import { TEST_EMAIL, TEST_PASSWORD } from '../../src/config.js'
+
+// Node < 22 has no global WebSocket (needed by @supabase/realtime-js).
+const realtimeTransport = WebSocket as unknown as typeof globalThis.WebSocket
 // Words to try when planting a guest card — we pick one the permanent account
 // does not already own so the merge moves it (rather than de-duping it away).
 const MERGE_WORDS = ['umbrella', 'mountain', 'river', 'forest', 'window', 'bridge']
@@ -24,6 +28,7 @@ async function loadCreds(request: APIRequestContext): Promise<void> {
 function isolatedClient(): SupabaseClient {
     return createClient(supabaseUrl, supabaseKey, {
         auth: { persistSession: false, autoRefreshToken: false },
+        realtime: { transport: realtimeTransport },
     })
 }
 

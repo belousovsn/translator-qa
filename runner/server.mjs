@@ -45,6 +45,9 @@ const RUNS_DIR = path.join(ROOT, 'runner', '.runs');
 
 const CONFIG = {
   port: Number(process.env.RUNNER_PORT ?? 8787),
+  // Bind to loopback by default — the service is meant to sit behind nginx.
+  // Set RUNNER_HOST=0.0.0.0 only if you really need to expose it directly.
+  host: process.env.RUNNER_HOST ?? '127.0.0.1',
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim())
@@ -535,8 +538,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 fs.mkdirSync(RUNS_DIR, { recursive: true });
-server.listen(CONFIG.port, () => {
-  console.log(`[runner] listening on :${CONFIG.port}`);
+server.listen(CONFIG.port, CONFIG.host, () => {
+  console.log(`[runner] listening on ${CONFIG.host}:${CONFIG.port}`);
   console.log(`[runner] allowed origins: ${CONFIG.allowedOrigins.join(', ') || '(none)'}`);
   console.log(`[runner] target: ${process.env.TEST_BASE_URL ?? '(TEST_BASE_URL unset)'}`);
   console.log(`[runner] playwright cli: ${PW_CLI}`);

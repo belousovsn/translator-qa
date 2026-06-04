@@ -20,11 +20,13 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.99.2"
+    "@supabase/supabase-js": "^2.99.2",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
     "dotenv": "^17.4.1",
     "typescript": "^5.6.3"
   }
