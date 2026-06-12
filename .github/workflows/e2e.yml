@@ -13,6 +13,13 @@ jobs:
   e2e:
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    # Job-level env so steps inherit it and the `if` below can read env.* — the
+    # `secrets` context is not available in `if` conditions.
+    env:
+      TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
+      TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+      TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,21 +34,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run safe suite (unauth + API)
-        env:
-          TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
         run: npm run test:safe
 
       - name: Run authenticated suite
         # Only when the disposable account credentials are configured.
-        if: ${{ secrets.TEST_EMAIL != '' && secrets.TEST_PASSWORD != '' }}
-        env:
-          TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        if: ${{ env.TEST_EMAIL != '' && env.TEST_PASSWORD != '' }}
         run: npm run test:auth
 
       - name: Upload Playwright report
