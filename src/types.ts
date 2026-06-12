@@ -92,6 +92,18 @@ export interface Card {
     score?: number;
 }
 
+/** One word in a target language, as returned by POST /api/cards/translate. */
+export interface CardTranslation {
+    word: string;
+    transliteration?: string;
+    ttsFile?: string;
+}
+
+/** Response shape of POST /api/cards/translate (mp-runtime's ctx.translate). */
+export interface CardsTranslateResponse {
+    translations: Record<string, Partial<Record<Language, CardTranslation | null>>>;
+}
+
 export interface GameCardRequirements {
     minCards: number;
     maxCards?: number;
