@@ -24,6 +24,7 @@ authenticated journeys, asynchronous/mocked backend behaviour, and API contract 
 | Authenticated journeys | `tests/auth/*.spec.ts` | Positive flow, Words Pump queue flow, authenticated onboarding milestones | Yes |
 | Server API examples | `tests/api/server_api_examples.spec.ts` | `/api/translate` validation, `/api/settings` shape, admin card translations (admin tests auto-skip without `ADMIN_API_KEY`) | Partly |
 | Account merge (smoke) | `tests/api/account_merge.spec.ts` | Guest→permanent account card merge: validation/security always; full round-trip auto-skips until enabled server-side | Yes |
+| Cross-language translate (smoke) | `tests/api/cards_translate.spec.ts` | `POST /api/cards/translate` scoped-card-token contract (backs the games SDK's `ctx.translate`): bearer-token validation always; live lookup auto-skips without `ADMIN_API_KEY` or server-side game-token signing | Mixed |
 
 ## Layout
 
