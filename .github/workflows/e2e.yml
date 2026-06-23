@@ -1,16 +1,38 @@
 name: E2E
 
-# Runs the Playwright suite against the deployed test environment.
+# Two jobs:
+#   typecheck — runs on every push / PR. Fast, no secrets, catches type errors early.
+#   e2e       — runs the Playwright suite against the deployed test environment on a
+#               nightly schedule and on manual dispatch.
 # Configure repo secrets: TEST_BASE_URL, TEST_EMAIL, TEST_PASSWORD, ADMIN_API_KEY (optional).
 # The unauth suite needs only TEST_BASE_URL; auth tests need the disposable account creds.
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *' # nightly at 03:00 UTC
 
 jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check the suite
+        run: npm run typecheck
+
   e2e:
+    # The live suite needs the deployed env + secrets, so keep it off per-push runs.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     timeout-minutes: 30
     runs-on: ubuntu-latest
     # Job-level env so steps inherit it and the `if` below can read env.* — the
@@ -33,7 +55,7 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Run safe suite (unauth + API)
+      - name: Run safe suite (unauth + translation + onboarding + API)
         run: npm run test:safe
 
       - name: Run authenticated suite

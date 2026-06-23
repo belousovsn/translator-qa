@@ -19,8 +19,10 @@ authenticated journeys, asynchronous/mocked backend behaviour, and API contract 
 | --- | --- | --- | --- |
 | Translator UI (unauth) | `tests/unauth/translator.spec.ts` | Input, on-screen keyboard, initial section visibility; auto-translate blocked via route mocking for deterministic load | No |
 | Post-sign-in content load | `tests/unauth/sign_in_content_load.spec.ts` | Library + collection render immediately after signing in; backend responses mocked | Yes |
-| Translation | `tests/translation/translate_english_word.spec.ts` | English-word translation flow and panel behaviour | Mixed |
-| Onboarding | `tests/onboarding/*.spec.ts` | Milestones, quest, and spotlight onboarding flows | Mixed |
+| Translation | `tests/translation/translate_english_word.spec.ts` | English-word translation flow and panel behaviour (Armenian + Greek) | Mixed |
+| Translation direction | `tests/translation/language_selector.spec.ts` | Swap button reverses the From/To direction | No |
+| Onboarding | `tests/onboarding/onboarding_*.spec.ts` | Milestones, quest, and spotlight onboarding flows | Mixed |
+| First-run welcome picker | `tests/onboarding/welcome_language_picker.spec.ts` | The study-language picker shown to brand-new guests, and that returning users skip it | No |
 | Authenticated journeys | `tests/auth/*.spec.ts` | Positive flow, Words Pump queue flow, authenticated onboarding milestones | Yes |
 | Server API examples | `tests/api/server_api_examples.spec.ts` | `/api/translate` validation, `/api/settings` shape, admin card translations (admin tests auto-skip without `ADMIN_API_KEY`) | Partly |
 | Account merge (smoke) | `tests/api/account_merge.spec.ts` | Guest→permanent account card merge: validation/security always; full round-trip auto-skips until enabled server-side | Yes |
@@ -33,6 +35,7 @@ src/
   types.ts        # API/domain types (mirrors the app's public shapes; decoupled from the app repo)
   config.ts       # dotenv loader + validated env access (TEST_BASE_URL, credentials, ADMIN_API_KEY)
 page_objects/     # Page Object Model: auth modal, translator, dictionary, onboarding
+  first-run.ts    # helper: seed a study language so the first-run welcome picker can't block clicks
 tests/
   unauth/         # no authentication required (or sign-in with all backend calls mocked)
   translation/    # translation flows
@@ -48,9 +51,16 @@ playwright.config.ts     # projects: auth-setup, cards-auth-cleanup, auth-tests,
 
 The Playwright **projects** map to how you'd select tests:
 
-- `chromium` — everything except `auth/` (the safe, mostly unauthenticated tests).
+- `chromium` — everything except `auth/` (the unauthenticated UI, translation,
+  onboarding, and API suites). This is what `npm run test:safe` runs.
 - `auth-tests` — authenticated journeys; depends on `auth-setup` and runs the
   `cards-auth-cleanup` teardown afterwards.
+
+> **First-run welcome picker.** The app shows brand-new guests a modal
+> study-language picker (`#welcomeOverlay`) that intercepts pointer events. The
+> page objects seed a study language before navigating so it stays closed; the
+> `tests/onboarding/welcome_language_picker.spec.ts` spec is the one place that
+> exercises the picker itself. See `page_objects/first-run.ts`.
 
 ## Getting started
 
@@ -76,7 +86,8 @@ ADMIN_API_KEY=              # optional; admin API tests skip without it
 
 ```bash
 npm run test          # full suite
-npm run test:safe     # unauth + API only (no auth state needed for unauth)
+npm run test:safe     # everything except authenticated journeys (chromium project)
+npm run test:guest    # only fully mocked, sign-in-free specs (no credentials needed)
 npm run test:auth     # authenticated journeys (uses the disposable account)
 npm run test:ui       # Playwright UI mode
 npm run test:headed   # headed browser
@@ -85,15 +96,24 @@ npm run codegen       # record a new test against TEST_BASE_URL
 npm run typecheck     # tsc --noEmit
 ```
 
-`test:safe`'s unauthenticated tests need no credentials. The authenticated tests sign in
-with the `.env` account and the `cards-auth-cleanup` teardown removes any cards they create.
+`test:guest`'s specs are fully route-mocked and never sign in, so they need no credentials.
+`test:safe` additionally includes specs that sign in (the API contract suites and the
+post-sign-in content-load checks), so it expects `TEST_EMAIL` / `TEST_PASSWORD`. The
+authenticated tests sign in with the `.env` account and the `cards-auth-cleanup` teardown
+removes any cards they create.
 
 ## Continuous integration
 
-[`.github/workflows/e2e.yml`](.github/workflows/e2e.yml) runs the suite on a nightly
-schedule and on manual dispatch, against `TEST_BASE_URL`, and uploads the Playwright HTML
-report as an artifact. Configure these repository secrets: `TEST_BASE_URL`, `TEST_EMAIL`,
-`TEST_PASSWORD`, and (optionally) `ADMIN_API_KEY`.
+[`.github/workflows/e2e.yml`](.github/workflows/e2e.yml) has two jobs:
+
+- **typecheck** — runs `npm run typecheck` on every push and pull request. Fast, needs no
+  secrets, and catches type regressions before they reach the nightly run.
+- **e2e** — runs the suite (`test:safe`, then `test:auth` when account creds are present)
+  against `TEST_BASE_URL` on a nightly schedule and on manual dispatch, and uploads the
+  Playwright HTML report as an artifact.
+
+Configure these repository secrets: `TEST_BASE_URL`, `TEST_EMAIL`, `TEST_PASSWORD`, and
+(optionally) `ADMIN_API_KEY`.
 
 ## Roadmap
 
