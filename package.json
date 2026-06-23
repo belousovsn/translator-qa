@@ -6,7 +6,8 @@
   "description": "Public Playwright E2E + API test suite for the MemDecks / Translator language-learning app (runs against test.memdecks.com).",
   "scripts": {
     "test": "playwright test",
-    "test:safe": "playwright test --project=chromium tests/unauth tests/api",
+    "test:safe": "playwright test --project=chromium",
+    "test:guest": "playwright test --project=chromium tests/unauth/translator.spec.ts tests/translation tests/onboarding",
     "test:auth": "playwright test --project=auth-tests",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",

@@ -1,4 +1,5 @@
 import {type Page, type Locator, expect} from '@playwright/test'
+import { suppressFirstRunWelcome } from './first-run.js'
 
 export class TranslatorPage {
     readonly page: Page;
@@ -22,6 +23,7 @@ export class TranslatorPage {
     readonly translatedWord: Locator;
     readonly sourceLangLabel: Locator;
     readonly targetLangLabel: Locator;
+    readonly langSwapBtn: Locator;
     readonly sourceTtsBtn: Locator;
     readonly targetTtsBtn: Locator;
     readonly cardTtsBtn: Locator;
@@ -60,6 +62,7 @@ constructor(page: Page) {
     this.translatedWord = page.locator('.translated-word')
     this.sourceLangLabel = page.locator('#sourceLangLabel')
     this.targetLangLabel = page.locator('#targetLangLabel')
+    this.langSwapBtn = page.locator('#langSwapBtn')
     this.sourceTtsBtn = page.locator('#sourceTtsBtn')
     this.targetTtsBtn = page.locator('#targetTtsBtn')
     this.cardTtsBtn = page.locator('#cardTtsBtn')
@@ -79,6 +82,9 @@ constructor(page: Page) {
 }
 
 async goto() {
+    // Returning-user state so the first-run welcome picker can't block clicks.
+    // No-ops if a test already seeded a study language (e.g. Greek).
+    await suppressFirstRunWelcome(this.page)
     await this.page.goto('index.html', {waitUntil: 'networkidle'})
     await this.page.locator('nav.nav-panel > ul > li > a',
         {hasText: 'Translator'}

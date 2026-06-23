@@ -214,6 +214,11 @@ test.describe('Translate English word', () => {
         // ── core result ──────────────────────────────────────────────────────
         test('shows Greek translation, correct dropdowns, images, card, and Save button', async () => {
             await page.addInitScript(() => {
+                // Study language must be Greek: the pair is locked to study ↔ English,
+                // so without this the app coerces the Greek target back to the default
+                // study language (Armenian). Also marks the user as returning so the
+                // first-run welcome picker stays closed.
+                localStorage.setItem('mainLang', 'gr')
                 localStorage.setItem('sourceLang', 'en')
                 localStorage.setItem('targetLang', 'gr')
             })
@@ -242,6 +247,11 @@ test.describe('Translate English word', () => {
         // ── suggestions: present ─────────────────────────────────────────────
         test('shows suggestions panel for Greek flow when translate API returns WORD_NOT_FOUND', async () => {
             await page.addInitScript(() => {
+                // Study language must be Greek: the pair is locked to study ↔ English,
+                // so without this the app coerces the Greek target back to the default
+                // study language (Armenian). Also marks the user as returning so the
+                // first-run welcome picker stays closed.
+                localStorage.setItem('mainLang', 'gr')
                 localStorage.setItem('sourceLang', 'en')
                 localStorage.setItem('targetLang', 'gr')
             })
@@ -259,6 +269,11 @@ test.describe('Translate English word', () => {
         // ── suggestions: absent ──────────────────────────────────────────────
         test('hides suggestions panel for Greek flow when translate API returns no suggestions', async () => {
             await page.addInitScript(() => {
+                // Study language must be Greek: the pair is locked to study ↔ English,
+                // so without this the app coerces the Greek target back to the default
+                // study language (Armenian). Also marks the user as returning so the
+                // first-run welcome picker stays closed.
+                localStorage.setItem('mainLang', 'gr')
                 localStorage.setItem('sourceLang', 'en')
                 localStorage.setItem('targetLang', 'gr')
             })
@@ -276,6 +291,11 @@ test.describe('Translate English word', () => {
         // ── TTS: not applicable for Greek ────────────────────────────────────
         test('keeps all TTS buttons disabled (Greek has no TTS support)', async () => {
             await page.addInitScript(() => {
+                // Study language must be Greek: the pair is locked to study ↔ English,
+                // so without this the app coerces the Greek target back to the default
+                // study language (Armenian). Also marks the user as returning so the
+                // first-run welcome picker stays closed.
+                localStorage.setItem('mainLang', 'gr')
                 localStorage.setItem('sourceLang', 'en')
                 localStorage.setItem('targetLang', 'gr')
             })

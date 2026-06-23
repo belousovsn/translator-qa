@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { Auth } from '../../page_objects/auth-modal.js'
+import { suppressFirstRunWelcome } from '../../page_objects/first-run.js'
 import { TEST_EMAIL, TEST_PASSWORD } from '../../src/config.js'
 
 async function mockSignedInBackgroundRequests(page: Page) {
@@ -63,6 +64,7 @@ test('library loads content immediately after signing in from the visible page',
         route.fulfill({ status: 200, body: JSON.stringify([]) }),
     )
 
+    await suppressFirstRunWelcome(page)
     await page.goto('index.html', { waitUntil: 'networkidle' })
     await page.locator('nav.nav-panel a[data-page="library"]').click()
     await expect(page.locator('[data-library-login]')).toBeVisible()
@@ -100,6 +102,7 @@ test('collection loads content immediately after signing in from the visible pag
         }),
     )
 
+    await suppressFirstRunWelcome(page)
     await page.goto('index.html', { waitUntil: 'networkidle' })
     await page.locator('nav.nav-panel a[data-page="dictionary"]').click()
     await expect(page.locator('[data-dictionary-signin]')).toBeVisible()
