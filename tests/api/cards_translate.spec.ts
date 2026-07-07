@@ -41,7 +41,7 @@ async function mintCardToken(request: APIRequestContext, userId: string): Promis
 test.describe('POST /api/cards/translate', () => {
     test('rejects a request with no bearer token', async ({ request }) => {
         const res = await request.post('/api/cards/translate', {
-            data: { words: ['apple'], languages: ['gr'] },
+            data: { words: ['apple'], languages: ['el'] },
         })
         expect(res.status()).toBe(401)
     })
@@ -49,7 +49,7 @@ test.describe('POST /api/cards/translate', () => {
     test('rejects a non-scoped (bogus) bearer token', async ({ request }) => {
         const res = await request.post('/api/cards/translate', {
             headers: { Authorization: 'Bearer not-a-real-card-token' },
-            data: { words: ['apple'], languages: ['gr'] },
+            data: { words: ['apple'], languages: ['el'] },
         })
         expect(res.status()).toBe(401)
     })
@@ -74,21 +74,21 @@ test.describe('POST /api/cards/translate', () => {
             // a CardTranslation or null (null = no stored/derivable translation).
             const res = await request.post('/api/cards/translate', {
                 headers: { Authorization: `Bearer ${cardToken}` },
-                data: { words: ['apple'], languages: ['gr'] },
+                data: { words: ['apple'], languages: ['el'] },
             })
             expect(res.status()).toBe(200)
             const body = (await res.json()) as CardsTranslateResponse
             expect(body.translations).toBeTruthy()
             expect(Object.prototype.hasOwnProperty.call(body.translations, 'apple')).toBeTruthy()
 
-            const gr = body.translations.apple?.gr
-            if (gr !== null && gr !== undefined) {
-                expect(typeof gr.word).toBe('string')
-                expect(gr.word.length).toBeGreaterThan(0)
+            const el = body.translations.apple?.el
+            if (el !== null && el !== undefined) {
+                expect(typeof el.word).toBe('string')
+                expect(el.word.length).toBeGreaterThan(0)
             }
         } finally {
             const supabase = await getSupabase()
-            await supabase.auth.signOut()
+            await supabase.auth.signOut({ scope: 'local' })
         }
     })
 })

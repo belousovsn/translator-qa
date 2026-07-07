@@ -28,11 +28,12 @@ export const dogTranslationMockHyWithTts: Translation = {
     ttsFile: 'armenian/dog.mp3',
 }
 
-// English → Greek: "dog" → "σκύλος"
-export const dogTranslationMockGr: Translation = {
-    id: 'mock-id-gr',
+// English → Greek: "dog" → "σκύλος". Greek is `el` since the app's gr → el
+// code migration, and it now supports transliteration (rendered in the UI).
+export const dogTranslationMockEl: Translation = {
+    id: 'mock-id-el',
     englishWord: { id: 'mock-en-3', value: 'dog', language: 'en' },
-    foreignWord: { id: 'mock-gr-1', value: 'σκύλος', language: 'gr' },
-    transliteration: '',
+    foreignWord: { id: 'mock-el-1', value: 'σκύλος', language: 'el' },
+    transliteration: 'skýlos',
     ttsFile: '',
 }

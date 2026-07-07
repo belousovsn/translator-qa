@@ -1,8 +1,10 @@
+// Greek is `el` (ISO 639-1): the app migrated `gr` → `el`, and the test
+// environment rejects `gr` as an unsupported pair.
 export type Language =
     | "ru"
     | "en"
     | "hy"
-    | "gr";
+    | "el";
 
 export interface Word {
     id: string;

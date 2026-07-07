@@ -17,7 +17,7 @@ import { type Page } from '@playwright/test'
  *
  * The init script only seeds `mainLang` when it is **not already set**, so a
  * test that pre-seeds a different study language (e.g. Greek via
- * `localStorage.setItem('mainLang', 'gr')`) wins regardless of call order.
+ * `localStorage.setItem('mainLang', 'el')`) wins regardless of call order.
  * Must be called before the navigation that boots the app.
  */
 export async function suppressFirstRunWelcome(page: Page, mainLang: string = 'hy'): Promise<void> {

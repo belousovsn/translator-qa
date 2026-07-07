@@ -34,7 +34,9 @@ async function normalizeStudyLanguage(email: string, password: string): Promise<
     }
     // updateUser is idempotent — no need to fetch the current value first
     await supabase.auth.updateUser({ data: { main_language: 'hy' } })
-    await supabase.auth.signOut()
+    // Local scope only: the default global signOut revokes EVERY session of the
+    // shared test account, killing tokens that parallel API specs are using.
+    await supabase.auth.signOut({ scope: 'local' })
 }
 
 setup('authenticate', async ({page}) => {

@@ -33,7 +33,7 @@ async function signInTestUser() {
 async function fetchTranslation(
     request: APIRequestContext,
     word: string,
-    targetLang: 'hy' | 'gr',
+    targetLang: 'hy' | 'el',
 ): Promise<Translation | null> {
     const response = await request.post('/api/translate', {
         data: {
@@ -68,12 +68,19 @@ async function pickAdminTestCard(
             .filter((value): value is string => Boolean(value)),
     )
 
+    const rejections: string[] = []
     for (const word of CANDIDATE_WORDS) {
-        if (existingWords.has(word)) continue
+        if (existingWords.has(word)) {
+            rejections.push(`${word}: already owned by the test account`)
+            continue
+        }
 
         const armenianTranslation = await fetchTranslation(request, word, 'hy')
-        const greekTranslation = await fetchTranslation(request, word, 'gr')
-        if (!armenianTranslation || !greekTranslation) continue
+        const greekTranslation = await fetchTranslation(request, word, 'el')
+        if (!armenianTranslation || !greekTranslation) {
+            rejections.push(`${word}: translate failed (hy=${Boolean(armenianTranslation)}, el=${Boolean(greekTranslation)})`)
+            continue
+        }
 
         return {
             card: {
@@ -93,7 +100,7 @@ async function pickAdminTestCard(
         }
     }
 
-    throw new Error(`Could not find an unused candidate word from: ${CANDIDATE_WORDS.join(', ')}`)
+    throw new Error(`No usable candidate word — ${rejections.join('; ')}`)
 }
 
 test.describe('Server API examples', () => {
@@ -186,7 +193,7 @@ test.describe('Server API examples', () => {
                 params: {
                     userId,
                     includeTranslations: 'true',
-                    translationLanguages: 'hy,gr',
+                    translationLanguages: 'hy,el',
                 },
             })
 
@@ -201,7 +208,7 @@ test.describe('Server API examples', () => {
                         sourceWord: string
                         targetWord: string
                     } | null
-                    gr?: {
+                    el?: {
                         sourceLang: string
                         targetLang: string
                         sourceWord: string
@@ -224,9 +231,9 @@ test.describe('Server API examples', () => {
                 sourceWord: card.translation.englishWord.value,
                 targetWord: card.translation.foreignWord.value,
             }))
-            expect(savedCard?.translations?.gr).toEqual(expect.objectContaining({
+            expect(savedCard?.translations?.el).toEqual(expect.objectContaining({
                 sourceLang: 'en',
-                targetLang: 'gr',
+                targetLang: 'el',
                 sourceWord: greekTranslation.englishWord.value,
                 targetWord: greekTranslation.foreignWord.value,
             }))
@@ -237,7 +244,7 @@ test.describe('Server API examples', () => {
                 .delete()
                 .eq('id', card.id)
 
-            await supabase.auth.signOut()
+            await supabase.auth.signOut({ scope: 'local' })
         }
     })
 
@@ -265,7 +272,7 @@ test.describe('Server API examples', () => {
             })
         } finally {
             const supabase = await getSupabase()
-            await supabase.auth.signOut()
+            await supabase.auth.signOut({ scope: 'local' })
         }
     })
 })
