@@ -1,10 +1,11 @@
-// Greek is `el` (ISO 639-1): the app migrated `gr` → `el`, and the test
-// environment rejects `gr` as an unsupported pair.
 export type Language =
     | "ru"
     | "en"
     | "hy"
-    | "el";
+    // Greek's canonical app-state code is `el`. `gr` is the legacy code, still
+    // accepted server-side as an alias (some API tests exercise it directly).
+    | "el"
+    | "gr";
 
 export interface Word {
     id: string;
