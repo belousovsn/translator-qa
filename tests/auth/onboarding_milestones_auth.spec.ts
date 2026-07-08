@@ -182,10 +182,10 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
 
         // playedGame is intentionally marked on *exit*, not on open ("count it
         // once a game was actually open and is now being closed"), so close the
-        // overlay to fire the milestone. The Exit button lives behind the
-        // collapsed controls bar, so reveal it first via the toggle.
-        await page.locator('#gameOverlayToggle').click()
-        await page.locator('#gameOverlayClose').click()
+        // game to fire the milestone. The in-game Back button/header was removed;
+        // browser Back now pops the host's history "trap" entry and closes the
+        // game via popstate.
+        await page.goBack()
         await expect(page.locator('#gameOverlay')).toHaveClass(/hidden/)
 
         // The opened game iframe is about:blank, which inherits this origin and

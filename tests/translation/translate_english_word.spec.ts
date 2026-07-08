@@ -2,7 +2,7 @@
 
 import { test, expect, BrowserContext, Page } from '@playwright/test'
 import { TranslatorPage } from '../../page_objects/translator-page.js'
-import { dogTranslationMockHy, dogTranslationMockHyWithTts, dogTranslationMockGr } from '../mocks/translationMocks.js'
+import { dogTranslationMockHy, dogTranslationMockHyWithTts, dogTranslationMockEl } from '../mocks/translationMocks.js'
 import { catUnsplashMock } from '../mocks/imageMocks.js'
 
 const WORD_NOT_FOUND_WITH_SUGGESTIONS = JSON.stringify({
@@ -207,7 +207,7 @@ test.describe('Translate English word', () => {
     // ════════════════════════════════════════════════════════════════════════
     // Language: Greek
     // Language state is pre-set via localStorage so the page boots with
-    // sourceLang=en / targetLang=gr (bypassing the UI language selector).
+    // sourceLang=en / targetLang=el (bypassing the UI language selector).
     // ════════════════════════════════════════════════════════════════════════
     test.describe('English → Greek', () => {
 
@@ -218,12 +218,12 @@ test.describe('Translate English word', () => {
                 // so without this the app coerces the Greek target back to the default
                 // study language (Armenian). Also marks the user as returning so the
                 // first-run welcome picker stays closed.
-                localStorage.setItem('mainLang', 'gr')
+                localStorage.setItem('mainLang', 'el')
                 localStorage.setItem('sourceLang', 'en')
-                localStorage.setItem('targetLang', 'gr')
+                localStorage.setItem('targetLang', 'el')
             })
             await page.route('**/api/translate', route =>
-                route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockGr) })
+                route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockEl) })
             )
             await page.route('**/api/images**', route =>
                 route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) })
@@ -251,9 +251,9 @@ test.describe('Translate English word', () => {
                 // so without this the app coerces the Greek target back to the default
                 // study language (Armenian). Also marks the user as returning so the
                 // first-run welcome picker stays closed.
-                localStorage.setItem('mainLang', 'gr')
+                localStorage.setItem('mainLang', 'el')
                 localStorage.setItem('sourceLang', 'en')
-                localStorage.setItem('targetLang', 'gr')
+                localStorage.setItem('targetLang', 'el')
             })
             await page.route('**/api/translate', route =>
                 route.fulfill({ status: 400, body: WORD_NOT_FOUND_WITH_SUGGESTIONS })
@@ -273,9 +273,9 @@ test.describe('Translate English word', () => {
                 // so without this the app coerces the Greek target back to the default
                 // study language (Armenian). Also marks the user as returning so the
                 // first-run welcome picker stays closed.
-                localStorage.setItem('mainLang', 'gr')
+                localStorage.setItem('mainLang', 'el')
                 localStorage.setItem('sourceLang', 'en')
-                localStorage.setItem('targetLang', 'gr')
+                localStorage.setItem('targetLang', 'el')
             })
             await page.route('**/api/translate', route =>
                 route.fulfill({ status: 400, body: WORD_NOT_FOUND_WITHOUT_SUGGESTIONS })
@@ -295,12 +295,12 @@ test.describe('Translate English word', () => {
                 // so without this the app coerces the Greek target back to the default
                 // study language (Armenian). Also marks the user as returning so the
                 // first-run welcome picker stays closed.
-                localStorage.setItem('mainLang', 'gr')
+                localStorage.setItem('mainLang', 'el')
                 localStorage.setItem('sourceLang', 'en')
-                localStorage.setItem('targetLang', 'gr')
+                localStorage.setItem('targetLang', 'el')
             })
             await page.route('**/api/translate', route =>
-                route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockGr) })
+                route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockEl) })
             )
             await page.route('**/api/images**', route =>
                 route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) })
