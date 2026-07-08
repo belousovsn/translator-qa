@@ -8,6 +8,7 @@
     "test": "playwright test",
     "test:safe": "playwright test --project=chromium",
     "test:guest": "playwright test --project=chromium tests/unauth/translator.spec.ts tests/translation tests/onboarding",
+    "test:smoke": "playwright test --project=chromium --grep @smoke",
     "test:auth": "playwright test --project=auth-tests",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",

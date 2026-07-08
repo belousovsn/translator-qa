@@ -322,11 +322,13 @@ function startRun(group, ip) {
     lineBuf = '';
   };
 
+  // Slower live-service groups (auth, lobby) may set their own kill timeout.
+  const runTimeoutMs = GROUPS[group].timeoutMs ?? CONFIG.runTimeoutMs;
   const timeout = setTimeout(() => {
     run.timedOut = true;
-    broadcast(run, 'log', { line: `⏱ Timed out after ${CONFIG.runTimeoutMs}ms — killing run.` });
+    broadcast(run, 'log', { line: `⏱ Timed out after ${runTimeoutMs}ms — killing run.` });
     child.kill('SIGKILL');
-  }, CONFIG.runTimeoutMs);
+  }, runTimeoutMs);
 
   child.on('error', (err) => {
     clearTimeout(timeout);

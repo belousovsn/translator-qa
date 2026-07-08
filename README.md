@@ -24,6 +24,9 @@ authenticated journeys, asynchronous/mocked backend behaviour, and API contract 
 | Onboarding | `tests/onboarding/onboarding_*.spec.ts` | Milestones, quest, and spotlight onboarding flows | Mixed |
 | First-run welcome picker | `tests/onboarding/welcome_language_picker.spec.ts` | The study-language picker shown to brand-new guests, and that returning users skip it | No |
 | Authenticated journeys | `tests/auth/*.spec.ts` | Positive flow, Words Pump queue flow, authenticated onboarding milestones | Yes |
+| Multiplayer lobby | `tests/auth/lobby.spec.ts` | Live lobby (socket.io): matchmaking choices, solo match launch + Back navigation, quick-match queue + cancel, room create/join by code, and a real two-player match between players with *different* study languages (second player is an anonymous guest) | Yes |
+| Focused learning | `tests/auth/focused_learning.spec.ts` | Game study set: card picker filters a mixed-language collection to the current study language, focused `cardIds` sent to the resolver, zero-match and partial-match (shortfall) handling, per-language persistence | Yes |
+| Games resolver (smoke) | `tests/api/games_resolve.spec.ts` | `POST /api/games/resolve` contract: auth guard, validation, unknown game, and a live cross-language focus round-trip (cards saved for two study languages resolve per language) | Yes |
 | Server API examples | `tests/api/server_api_examples.spec.ts` | `/api/translate` validation, `/api/settings` shape, admin card translations (admin tests auto-skip without `ADMIN_API_KEY`) | Partly |
 | Account merge (smoke) | `tests/api/account_merge.spec.ts` | Guest→permanent account card merge: validation/security always; full round-trip auto-skips until enabled server-side | Yes |
 | Cross-language translate (smoke) | `tests/api/cards_translate.spec.ts` | `POST /api/cards/translate` scoped-card-token contract (backs the games SDK's `ctx.translate`): bearer-token validation always; live lookup auto-skips without `ADMIN_API_KEY` or server-side game-token signing | Mixed |
@@ -115,9 +118,12 @@ removes any cards they create.
 Configure these repository secrets: `TEST_BASE_URL`, `TEST_EMAIL`, `TEST_PASSWORD`, and
 (optionally) `ADMIN_API_KEY`.
 
-## Roadmap
+## Live QA Lab
 
-This suite is the foundation for a **"Live QA Lab"** on
-[my portfolio](https://github.com/) — a guarded runner that lets visitors trigger a
-curated subset of these tests against the live test environment and watch the results
-stream in, with a link to the full Playwright report.
+The [`runner/`](runner) service powers a **"Live QA Lab"** on my portfolio — a
+guarded runner that lets visitors trigger a curated subset of these tests against
+the live test environment and watch the results stream in over Server-Sent Events,
+with a link to the full Playwright report. Runs are picked from an allowlist of
+categorised groups (Smoke first, then unauthenticated E2E, authenticated E2E, and
+feature-driven specs); no visitor input reaches the command line. See
+[`runner/README.md`](runner/README.md).

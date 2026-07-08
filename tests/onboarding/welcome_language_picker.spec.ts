@@ -20,7 +20,7 @@ const title = '#welcomeTitle'
 const tiles = '#welcomeLangGrid button[data-lang]'
 
 test.describe('First-run welcome language picker', () => {
-    test('a brand-new guest is shown the language picker', async ({ page }) => {
+    test('a brand-new guest is shown the language picker', { tag: '@smoke' }, async ({ page }) => {
         await blockNetwork(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
 

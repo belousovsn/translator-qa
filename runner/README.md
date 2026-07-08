@@ -4,6 +4,23 @@ A small, dependency-free Node service (`server.mjs`) that lets the portfolio
 "Live QA Lab" trigger a curated subset of this Playwright suite against the
 deployed test environment and stream results back over Server-Sent Events.
 
+## Test groups
+
+The allowlist in [`groups.mjs`](groups.mjs) is organised into categories (the UI
+renders them under headers in this order):
+
+| Category | Groups | Signs in? |
+| --- | --- | --- |
+| **Smoke** | `smoke` — a fast `@smoke`-tagged cross-section (app loads, a word translates, onboarding shows, public API contracts) | no |
+| **E2E · Unauthenticated** | `unauth`, `translation`, `onboarding` | no |
+| **E2E · Authenticated** | `auth` — core signed-in journeys (add card, Words Pump, milestones) | yes |
+| **Feature-driven** | `lobby` (live multiplayer lobby), `focus` (focused-learning study set), `api` (contract + cross-language) | mixed |
+
+The smoke group runs whatever is tagged `{ tag: '@smoke' }` in the guest/API
+specs — keep those tags in step with the group. Slower live-service groups
+(`auth`, `lobby`, `focus`) set a per-group `timeoutMs` that overrides the
+runner's default kill timeout.
+
 ## Why it's safe to expose
 
 - **Allowlist only.** Visitors send a `group` id; the actual Playwright args

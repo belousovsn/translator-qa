@@ -64,7 +64,7 @@ test.describe('Page elements on initial load', async() => {
         await translatorPage.inputField.clear()
         await translatorPage.keyboardToggle.click()
     })
-    test('sections visibility on initial load', async () => {
+    test('sections visibility on initial load', { tag: '@smoke' }, async () => {
 
         await expect(translatorPage.inputField).toBeVisible()
         await expect(translatorPage.searchButton).toBeVisible()

@@ -65,7 +65,7 @@ test.describe('Translate English word', () => {
     test.describe('English → Armenian', () => {
 
         // ── core result ──────────────────────────────────────────────────────
-        test('shows Armenian translation, correct dropdowns, images, card, and Save button', async () => {
+        test('shows Armenian translation, correct dropdowns, images, card, and Save button', { tag: '@smoke' }, async () => {
             await page.route('**/api/translate', route =>
                 route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockHy) })
             )
@@ -205,7 +205,7 @@ test.describe('Translate English word', () => {
     })
 
     // ════════════════════════════════════════════════════════════════════════
-    // Language: Greek
+    // Language: Greek (code `el` — the app migrated gr → el)
     // Language state is pre-set via localStorage so the page boots with
     // sourceLang=en / targetLang=el (bypassing the UI language selector).
     // ════════════════════════════════════════════════════════════════════════
@@ -233,8 +233,8 @@ test.describe('Translate English word', () => {
 
             await expect(translatorPage.translatedWord).toHaveText('σκύλος')
 
-            // Greek has no transliteration
-            await expect(translatorPage.translitDisplay).toHaveText('')
+            // Greek supports transliteration since the gr → el migration
+            await expect(translatorPage.translitDisplay).toHaveText('skýlos')
 
             await expect(translatorPage.sourceLangLabel).toHaveText('English')
             await expect(translatorPage.targetLangLabel).toHaveText('Greek')
@@ -288,8 +288,8 @@ test.describe('Translate English word', () => {
 
         })
 
-        // ── TTS: not applicable for Greek ────────────────────────────────────
-        test('keeps all TTS buttons disabled (Greek has no TTS support)', async () => {
+        // ── TTS: unavailable (Greek supports TTS, but this word has no file) ──
+        test('keeps all TTS buttons disabled when the Greek word has no sound file', async () => {
             await page.addInitScript(() => {
                 // Study language must be Greek: the pair is locked to study ↔ English,
                 // so without this the app coerces the Greek target back to the default
