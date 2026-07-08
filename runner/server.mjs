@@ -250,10 +250,13 @@ function listCount(groupId) {
 
 async function refreshCounts() {
   const ids = Object.keys(GROUPS);
-  const counts = await Promise.all(ids.map(listCount));
-  ids.forEach((id, i) => {
-    groupCounts[id] = counts[i];
-  });
+  // Compute one at a time, NOT in parallel. Each `playwright … --list` forks a
+  // ~130 MB Node process; on a memory-capped host (systemd MemoryMax) running
+  // all groups' listings at once can breach the cgroup limit and OOM-kill the
+  // runner in a restart loop. Sequential keeps the peak at ~one child + server.
+  for (const id of ids) {
+    groupCounts[id] = await listCount(id);
+  }
   console.log(
     `[runner] test counts: ${ids.map((id) => `${id}=${groupCounts[id] ?? '?'}`).join(', ')}`,
   );
