@@ -118,9 +118,12 @@ removes any cards they create.
 Configure these repository secrets: `TEST_BASE_URL`, `TEST_EMAIL`, `TEST_PASSWORD`, and
 (optionally) `ADMIN_API_KEY`.
 
-## Roadmap
+## Live QA Lab
 
-This suite is the foundation for a **"Live QA Lab"** on
-[my portfolio](https://github.com/) — a guarded runner that lets visitors trigger a
-curated subset of these tests against the live test environment and watch the results
-stream in, with a link to the full Playwright report.
+The [`runner/`](runner) service powers a **"Live QA Lab"** on my portfolio — a
+guarded runner that lets visitors trigger a curated subset of these tests against
+the live test environment and watch the results stream in over Server-Sent Events,
+with a link to the full Playwright report. Runs are picked from an allowlist of
+categorised groups (Smoke first, then unauthenticated E2E, authenticated E2E, and
+feature-driven specs); no visitor input reaches the command line. See
+[`runner/README.md`](runner/README.md).

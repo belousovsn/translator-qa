@@ -29,7 +29,7 @@ test.describe('Translation direction (swap)', () => {
         await expect(translator.targetLangLabel).toHaveText('Armenian')
     })
 
-    test('swap button reverses the From/To direction and is reversible', async () => {
+    test('swap button reverses the From/To direction and is reversible', { tag: '@smoke' }, async () => {
         await expect(translator.langSwapBtn).toBeVisible()
 
         await translator.langSwapBtn.click()

@@ -104,7 +104,7 @@ async function pickAdminTestCard(
 }
 
 test.describe('Server API examples', () => {
-    test('POST /api/translate returns 400 with API error shape for invalid payload', async ({ request }) => {
+    test('POST /api/translate returns 400 with API error shape for invalid payload', { tag: '@smoke' }, async ({ request }) => {
         const response = await request.post('/api/translate', {
             data: {
                 word: '   ',
@@ -136,7 +136,7 @@ test.describe('Server API examples', () => {
         })
     })
 
-    test('GET /api/settings returns public config and games list', async ({ request }) => {
+    test('GET /api/settings returns public config and games list', { tag: '@smoke' }, async ({ request }) => {
         const response = await request.get('/api/settings')
         const body = await response.json() as {
             SUPABASE_URL?: string

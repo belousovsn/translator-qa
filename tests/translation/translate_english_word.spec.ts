@@ -65,7 +65,7 @@ test.describe('Translate English word', () => {
     test.describe('English → Armenian', () => {
 
         // ── core result ──────────────────────────────────────────────────────
-        test('shows Armenian translation, correct dropdowns, images, card, and Save button', async () => {
+        test('shows Armenian translation, correct dropdowns, images, card, and Save button', { tag: '@smoke' }, async () => {
             await page.route('**/api/translate', route =>
                 route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockHy) })
             )

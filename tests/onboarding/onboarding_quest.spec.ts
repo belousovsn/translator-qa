@@ -11,7 +11,7 @@ async function blockSeedTranslate(page: Page): Promise<void> {
 }
 
 test.describe('Onboarding quest + Translator chip', () => {
-    test('fresh user sees the Translator chip at 0/4', async ({ page }) => {
+    test('fresh user sees the Translator chip at 0/4', { tag: '@smoke' }, async ({ page }) => {
         const onboarding = new OnboardingPage(page)
         await blockSeedTranslate(page)
         await onboarding.seedState({}) // explicit fresh, active state
