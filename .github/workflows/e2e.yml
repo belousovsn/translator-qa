@@ -52,6 +52,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Verify TEST_BASE_URL is configured
+        # Without a base URL every page.goto('/') builds an invalid URL and the
+        # whole suite fails with cryptic "Cannot navigate to invalid URL" errors.
+        # Fail fast with a readable message instead.
+        run: |
+          if [ -z "$TEST_BASE_URL" ]; then
+            echo "::error::TEST_BASE_URL secret is not set. Configure it in repo settings (e.g. https://test.memdecks.com)."
+            exit 1
+          fi
+          echo "TEST_BASE_URL=$TEST_BASE_URL"
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
@@ -59,8 +70,10 @@ jobs:
         run: npm run test:safe
 
       - name: Run authenticated suite
-        # Only when the disposable account credentials are configured.
-        if: ${{ env.TEST_EMAIL != '' && env.TEST_PASSWORD != '' }}
+        # Only when the disposable account credentials are configured. `!cancelled()`
+        # (not the implicit success()) so a safe-suite failure doesn't silently skip
+        # the entire authenticated suite.
+        if: ${{ !cancelled() && env.TEST_EMAIL != '' && env.TEST_PASSWORD != '' }}
         run: npm run test:auth
 
       - name: Upload Playwright report

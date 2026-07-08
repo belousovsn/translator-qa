@@ -29,10 +29,11 @@ export const dogTranslationMockHyWithTts: Translation = {
 }
 
 // English → Greek: "dog" → "σκύλος"
-export const dogTranslationMockGr: Translation = {
-    id: 'mock-id-gr',
+// Greek's canonical language code is `el` (the app migrated off the legacy `gr`).
+export const dogTranslationMockEl: Translation = {
+    id: 'mock-id-el',
     englishWord: { id: 'mock-en-3', value: 'dog', language: 'en' },
-    foreignWord: { id: 'mock-gr-1', value: 'σκύλος', language: 'gr' },
+    foreignWord: { id: 'mock-el-1', value: 'σκύλος', language: 'el' },
     transliteration: '',
     ttsFile: '',
 }

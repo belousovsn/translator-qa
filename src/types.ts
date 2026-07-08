@@ -2,6 +2,9 @@ export type Language =
     | "ru"
     | "en"
     | "hy"
+    // Greek's canonical app-state code is `el`. `gr` is the legacy code, still
+    // accepted server-side as an alias (some API tests exercise it directly).
+    | "el"
     | "gr";
 
 export interface Word {
