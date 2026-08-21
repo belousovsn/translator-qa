@@ -49,7 +49,7 @@ async function mockTranslate(page: Page): Promise<void> {
 }
 
 test.describe('Onboarding milestone hooks (authenticated)', () => {
-    test('saving a card fires savedFirstCard (chip 1/4 → 2/4)', async ({ page }) => {
+    test('saving a card fires savedFirstCard', async ({ page }) => {
         const onboarding = new OnboardingPage(page)
         const translator = new TranslatorPage(page)
         await mockPump(page)
@@ -61,16 +61,11 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
         await onboarding.seedState({})
         await translator.goto()
 
-        await expect(onboarding.chipCount).toHaveText('0/4')
-
         await translator.translateInput('dog')
-        await expect(onboarding.chipCount).toHaveText('1/4') // translated
-
         await translator.openSaveModal()
         await translator.saveModalConfirmButton.click()
         await expect.soft(translator.scribeOverlay).toContainText('Card saved to your collection', { timeout: 10000 })
 
-        await expect(onboarding.chipCount).toHaveText('2/4') // + savedFirstCard
         const state = await onboarding.readState()
         expect(state?.milestones?.savedFirstCard).toBe(true)
         expect(state?.cardsSeen ?? 0).toBeGreaterThanOrEqual(1)
@@ -103,16 +98,10 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
 
         await onboarding.seedState({})
         await translator.goto()
-        await expect(onboarding.chipCount).toHaveText('0/4')
 
         // Signed-in scope actually fetches the collection → noteCardCount(5).
         await page.locator('[data-page="dictionary"]').click()
         await expect(page.locator('#dictCount')).toHaveText('5')
-
-        await onboarding.openProfile()
-        await expect(onboarding.questProgressCount).toHaveText('2/4')
-        await expect(onboarding.questSteps.nth(1)).toHaveClass(/is-done/) // Save your first card
-        await expect(onboarding.questSteps.nth(2)).toHaveClass(/is-done/) // Build a collection
 
         const state = await onboarding.readState()
         expect(state?.milestones?.savedFirstCard).toBe(true)
@@ -128,12 +117,10 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
         await onboarding.seedState({})
         await translator.goto()
 
-        await expect(onboarding.chipCount).toHaveText('0/4')
         await translator.clickNextWord()
         await expect(translator.inputField).toHaveValue('dog')
 
         // Next Word both translates the lemma and counts as a learning session.
-        await expect(onboarding.chipCount).toHaveText('2/4')
         const state = await onboarding.readState()
         expect(state?.milestones?.ranLearning).toBe(true)
         expect(state?.milestones?.translated).toBe(true)
@@ -181,18 +168,17 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
         await expect(page.locator('#gameOverlay')).not.toHaveClass(/hidden/)
 
         // playedGame is intentionally marked on *exit*, not on open ("count it
-        // once a game was actually open and is now being closed"), so close the
-        // game to fire the milestone. The in-game Back button/header was removed;
-        // browser Back now pops the host's history "trap" entry and closes the
-        // game via popstate.
+        // once a game was actually open and is now being closed"). The overlay
+        // has no chrome of its own — browser/gesture Back is the way out.
         await page.goBack()
         await expect(page.locator('#gameOverlay')).toHaveClass(/hidden/)
 
-        // The opened game iframe is about:blank, which inherits this origin and
-        // re-runs the seed init script — clobbering localStorage. So verify the
-        // milestone via the chip's in-memory render (toHaveText reads hidden
-        // elements too) rather than reading persisted state here.
-        await expect(onboarding.chipCount).toHaveText('1/4')
+        // The game iframe is about:blank, which inherits this origin and re-runs
+        // the seed init script, so localStorage briefly goes back to the seeded
+        // state. The exit write lands after that, hence the poll.
+        await expect
+            .poll(async () => (await onboarding.readState())?.milestones?.playedGame)
+            .toBe(true)
     })
 
     test('importing a starter deck fires importedDeck', async ({ page }) => {

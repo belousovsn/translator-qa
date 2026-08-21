@@ -21,9 +21,13 @@ authenticated journeys, asynchronous/mocked backend behaviour, and API contract 
 | Post-sign-in content load | `tests/unauth/sign_in_content_load.spec.ts` | Library + collection render immediately after signing in; backend responses mocked | Yes |
 | Translation | `tests/translation/translate_english_word.spec.ts` | English-word translation flow and panel behaviour (Armenian + Greek) | Mixed |
 | Translation direction | `tests/translation/language_selector.spec.ts` | Swap button reverses the From/To direction | No |
-| Onboarding | `tests/onboarding/onboarding_*.spec.ts` | Milestones, quest, and spotlight onboarding flows | Mixed |
+| Onboarding | `tests/onboarding/onboarding_*.spec.ts` | Activation milestone hooks and the first-run `lesson -> game -> lesson` path | Mixed |
+| Phrase Builder lesson | `tests/onboarding/phrase_lesson.spec.ts` | The lesson game as a registered game: language gating, no card gate, and invite-flow precedence | No |
 | First-run welcome picker | `tests/onboarding/welcome_language_picker.spec.ts` | The study-language picker shown to brand-new guests, and that returning users skip it | No |
 | Authenticated journeys | `tests/auth/*.spec.ts` | Positive flow, Words Pump queue flow, authenticated onboarding milestones | Yes |
+| Anki import | `tests/auth/anki_import.spec.ts` | Real `.apkg` import: subset preview, commit, private media, duplicate re-import messaging, newer-format instructions | Yes |
+| Card audio | `tests/auth/collection_audio.spec.ts` | Card-first audio resolver for imported vs generated sound | Yes |
+| Public SEO surface | `tests/seo/public_pages.spec.ts` | Indexable metadata on canonical pages, mobile overflow, sitemap 200s, support/deck redirects | No |
 | Multiplayer lobby | `tests/auth/lobby.spec.ts` | Live lobby (socket.io): matchmaking choices, solo match launch + Back navigation, quick-match queue + cancel, room create/join by code, and a real two-player match between players with *different* study languages (second player is an anonymous guest) | Yes |
 | Focused learning | `tests/auth/focused_learning.spec.ts` | Game study set: card picker filters a mixed-language collection to the current study language, focused `cardIds` sent to the resolver, zero-match and partial-match (shortfall) handling, per-language persistence | Yes |
 | Games resolver (smoke) | `tests/api/games_resolve.spec.ts` | `POST /api/games/resolve` contract: auth guard, validation, unknown game, and a live cross-language focus round-trip (cards saved for two study languages resolve per language) | Yes |
@@ -42,10 +46,12 @@ page_objects/     # Page Object Model: auth modal, translator, dictionary, onboa
 tests/
   unauth/         # no authentication required (or sign-in with all backend calls mocked)
   translation/    # translation flows
-  onboarding/     # onboarding flows
+  onboarding/     # first-run picker, the lesson/game path, activation milestones
   auth/           # authenticated journeys (use the disposable account)
   api/            # API-level contract & smoke tests
+  seo/            # public, indexable page contracts
   mocks/          # shared response fixtures used to make UI tests deterministic
+  fixtures/       # generated binary fixtures (e.g. a real .apkg for the Anki import tests)
   auth.setup.ts          # Playwright setup project: signs in once, saves storage state
   cardsCleanup.setup.ts  # teardown project: deletes the test account's cards, clears session
   supabase-client.ts     # lazy Supabase client built from the app's PUBLIC /api/settings

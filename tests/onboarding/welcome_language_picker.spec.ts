@@ -18,6 +18,11 @@ async function blockNetwork(page: Page): Promise<void> {
 const overlay = '#welcomeOverlay'
 const title = '#welcomeTitle'
 const tiles = '#welcomeLangGrid button[data-lang]'
+const start = '#welcomeStart'
+// Greek hands the picker straight over to the first-run lesson path, which keeps
+// the overlay up until the lesson iframe mounts. This spec is about the picker
+// itself, so it deliberately chooses a language with no lesson behind it.
+const LESSON_LANG = 'el'
 
 test.describe('First-run welcome language picker', () => {
     test('a brand-new guest is shown the language picker', { tag: '@smoke' }, async ({ page }) => {
@@ -36,13 +41,18 @@ test.describe('First-run welcome language picker', () => {
         await blockNetwork(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
 
-        const chosen = page.locator(tiles).first()
+        const chosen = page.locator(`${tiles}:not([data-lang="${LESSON_LANG}"])`).first()
         const chosenLang = await chosen.getAttribute('data-lang')
         const chosenName = (await chosen.locator('.profile-language-tile-name').textContent())?.trim() ?? ''
         expect(chosenLang).toBeTruthy()
         expect(chosenName.length).toBeGreaterThan(0)
 
+        // Tapping a tile only selects it — the choice is committed by "Start",
+        // which the tile click enables.
         await chosen.click()
+        await expect(chosen).toHaveAttribute('aria-pressed', 'true')
+        await expect(page.locator(start)).toBeEnabled()
+        await page.locator(start).click()
 
         // Overlay closes and the choice is persisted as the study language.
         await expect(page.locator(overlay)).toBeHidden()

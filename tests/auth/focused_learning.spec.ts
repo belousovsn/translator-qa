@@ -92,14 +92,17 @@ const picker = {
     save: '#gameStudySave',
 }
 
+// The games panel no longer renders a study-set title/summary line (dropped when
+// games became the primary learning surface). The active mode is read from the
+// `[data-game-study-mode]` buttons and the edit button's label instead.
 test.describe('Focused learning (game study set)', () => {
     test('defaults to all eligible cards and the picker only offers current-language cards', async ({ page }) => {
         await mockAppBackend(page)
         await injectTestGame(page, 2)
         await gotoGames(page)
 
-        await expect(page.locator('#gameStudySetTitle')).toHaveText('All eligible cards')
         await expect(page.locator('[data-game-study-mode="default"]')).toHaveClass(/is-active/)
+        await expect(page.locator('#gameStudyEdit')).toHaveText('Choose cards')
 
         await page.locator('#gameStudyEdit').click()
         await expect(page.locator(picker.modal)).toBeVisible()
@@ -132,8 +135,8 @@ test.describe('Focused learning (game study set)', () => {
         await page.locator(picker.save).click()
 
         await expect(page.locator(picker.modal)).toBeHidden()
-        await expect(page.locator('#gameStudySetTitle')).toHaveText('2 selected cards')
         await expect(page.locator('[data-game-study-mode="cards"]')).toHaveClass(/is-active/)
+        await expect(page.locator('#gameStudyEdit')).toHaveText('Edit cards')
 
         const stored = await page.evaluate(
             (key) => JSON.parse(window.localStorage.getItem(key) ?? 'null'),
@@ -251,7 +254,7 @@ test.describe('Focused learning (game study set)', () => {
         )
 
         await gotoGames(page)
-        await expect(page.locator('#gameStudySetTitle')).toHaveText('All eligible cards')
         await expect(page.locator('[data-game-study-mode="default"]')).toHaveClass(/is-active/)
+        await expect(page.locator('#gameStudyEdit')).toHaveText('Choose cards')
     })
 })
