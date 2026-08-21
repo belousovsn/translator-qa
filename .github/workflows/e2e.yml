@@ -8,11 +8,18 @@ name: E2E
 # The unauth suite needs only TEST_BASE_URL; auth tests need the disposable account creds.
 
 on:
-  push:
+  # `pull_request` covers branch work; a bare `push:` alongside it ran the
+  # typecheck twice for every PR commit, so push is limited to main.
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *' # nightly at 03:00 UTC
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   typecheck:
