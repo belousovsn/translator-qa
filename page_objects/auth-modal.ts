@@ -1,5 +1,8 @@
 import {type Page, type Locator, expect} from '@playwright/test'
 
+/** Budget for a live Supabase email/password sign-in to land in the UI. */
+const AUTH_ROUND_TRIP_TIMEOUT_MS = 15_000
+
 
 export class Auth {
     readonly page : Page;
@@ -38,11 +41,15 @@ export class Auth {
     async signInButtonClick () {
         await this.signInButton.click()
     }
+    // Sign-in is the one step that waits on a real Supabase auth round trip (the
+    // rest of the suite is route-mocked), so it gets a budget of its own. The
+    // default 5s expect timeout made this the suite's only recurring flake:
+    // `#navUserEmail` was still empty when a slow/throttled auth call came back.
     async isUserSignedIn (email: string) {
-        await expect(this.navUserEmailLabel).toContainText(email)
+        await expect(this.navUserEmailLabel).toContainText(email, { timeout: AUTH_ROUND_TRIP_TIMEOUT_MS })
     }
     async isAuthPageClosed () {
-        await expect(this.authModal).not.toBeVisible()
+        await expect(this.authModal).not.toBeVisible({ timeout: AUTH_ROUND_TRIP_TIMEOUT_MS })
     }
     async signIn (email: string, password: string) {
         await this.startAuth()

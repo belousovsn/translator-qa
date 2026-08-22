@@ -25,7 +25,7 @@ export const GROUPS = {
     label: 'Smoke suite',
     category: 'smoke',
     description:
-      'A fast cross-section run first: the app loads, a word translates, onboarding appears, and the public API contracts hold. All guest-side and route-mocked — no sign-in.',
+      'A fast cross-section run first: the app loads, a word translates, the first-run language picker appears, and the public API contracts hold. All guest-side and route-mocked — no sign-in.',
     // Tests tagged @smoke across the guest + API specs (chromium project skips
     // tests/auth). Keep this in step with the `{ tag: "@smoke" }` annotations.
     args: ['--project=chromium', '--grep', '@smoke'],
@@ -56,7 +56,7 @@ export const GROUPS = {
     label: 'Onboarding',
     category: 'guest',
     description:
-      'Guest-reachable onboarding: quest chip progress, first-card spotlight, milestone hooks.',
+      'Guest-reachable onboarding: the first-run study-language picker, the lesson -> game -> lesson first-run path, the Phrase Builder lesson game, and the activation milestone hooks.',
     args: ['--project=chromium', 'tests/onboarding'],
     auth: false,
     kinds: ['e2e', 'regression'],
@@ -101,6 +101,29 @@ export const GROUPS = {
     auth: true,
     kinds: ['e2e', 'feature'],
     timeoutMs: 240000,
+  },
+  decks: {
+    label: 'Anki import + card audio',
+    category: 'feature',
+    description:
+      'Imports a real .apkg: subset preview, commit, private media rendering, duplicate re-import messaging, and the newer-format re-export instruction. Also covers the card-first audio resolver for imported vs generated sound.',
+    args: [
+      '--project=auth-tests',
+      'tests/auth/anki_import.spec.ts',
+      'tests/auth/collection_audio.spec.ts',
+    ],
+    auth: true,
+    kinds: ['e2e', 'feature'],
+    timeoutMs: 240000,
+  },
+  seo: {
+    label: 'Public SEO surface',
+    category: 'feature',
+    description:
+      'Indexable metadata on every canonical public page, mobile overflow, deck pages across production study languages, sitemap 200s, and the support/deck URL redirects.',
+    args: ['--project=chromium', 'tests/seo'],
+    auth: false,
+    kinds: ['seo', 'contract', 'regression'],
   },
   api: {
     label: 'API contracts',

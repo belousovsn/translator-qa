@@ -111,6 +111,173 @@ test.describe('Translate English word', () => {
         })
 
         // ── suggestions: present ─────────────────────────────────────────────
+        test('renders the canonical result immediately, then applies a ready capability snapshot', async () => {
+            const pending = {
+                ...dogTranslationMockHy,
+                wordId: 4242,
+                ttsStatus: 'unavailable' as const,
+                enrichmentStatus: 'pending' as const,
+                romanizationStatus: 'ready' as const,
+            }
+            let releaseStatus!: () => void
+            const statusGate = new Promise<void>((resolve) => { releaseStatus = resolve })
+            let statusCalls = 0
+
+            await page.route('**/api/translate', route => {
+                const body = route.request().postDataJSON() as { word?: string }
+                const result = body.word === 'dog' ? pending : dogTranslationMockHy
+                return route.fulfill({ status: 200, body: JSON.stringify(result) })
+            })
+            await page.route('**/api/images**', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) }))
+            await page.route('**/api/language-status**', async route => {
+                statusCalls += 1
+                await statusGate
+                await route.fulfill({
+                    status: 200,
+                    body: JSON.stringify({
+                        wordId: pending.wordId,
+                        lang: 'hy',
+                        canonicalTranslation: pending.foreignWord.value,
+                        transliteration: pending.transliteration,
+                        romanizationStatus: 'ready',
+                        ttsFile: '',
+                        ttsStatus: 'unavailable',
+                        enrichmentStatus: 'ready',
+                        enrichment: DOG_TRANSLATION_WITH_ENRICHMENT.enrichment,
+                    }),
+                })
+            })
+
+            await translatorPage.goto()
+            await translatorPage.translateInput('dog')
+
+            await expect(translatorPage.translatedWord).toHaveText(pending.foreignWord.value)
+            await expect(translatorPage.enrichmentPanel).toBeVisible()
+            await expect(translatorPage.synonymsList.locator('.chip--skeleton')).toHaveCount(5)
+
+            releaseStatus()
+            await expect(translatorPage.synonymsList.locator('.chip')).toHaveText(['hound', 'canine'])
+            await expect.poll(() => statusCalls).toBe(1)
+        })
+
+        test('ignores a stale capability response after a newer translation wins', async () => {
+            const pendingDog = {
+                ...dogTranslationMockHy,
+                wordId: 4243,
+                ttsStatus: 'unavailable' as const,
+                enrichmentStatus: 'pending' as const,
+                romanizationStatus: 'ready' as const,
+            }
+            const readyCat = {
+                id: 'mock-id-cat-ready',
+                wordId: 4244,
+                englishWord: { id: 'mock-en-cat-ready', value: 'cat', language: 'en' as const },
+                foreignWord: { id: 'mock-hy-cat-ready', value: 'կատու', language: 'hy' as const },
+                transliteration: 'katu',
+                ttsFile: '',
+                ttsStatus: 'unavailable' as const,
+                enrichmentStatus: 'unavailable' as const,
+                romanizationStatus: 'ready' as const,
+            }
+            let releaseOldStatus!: () => void
+            let markOldStatusStarted!: () => void
+            const oldStatusGate = new Promise<void>((resolve) => { releaseOldStatus = resolve })
+            const oldStatusStarted = new Promise<void>((resolve) => { markOldStatusStarted = resolve })
+
+            await page.route('**/api/translate', async route => {
+                const body = route.request().postDataJSON() as { word?: string }
+                // Only 'dog' may be pending. The app auto-translates a seed word on
+                // first open; if that came back pending too it would arm the gated
+                // language-status route below before goto()'s networkidle settled,
+                // deadlocking the page load rather than testing anything.
+                const result = body.word === 'cat'
+                    ? readyCat
+                    : body.word === 'dog' ? pendingDog : dogTranslationMockHy
+                await route.fulfill({ status: 200, body: JSON.stringify(result) })
+            })
+            await page.route('**/api/images**', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) }))
+            await page.route('**/api/language-status**', async route => {
+                markOldStatusStarted()
+                await oldStatusGate
+                try {
+                    await route.fulfill({
+                        status: 200,
+                        body: JSON.stringify({
+                            wordId: pendingDog.wordId,
+                            lang: 'hy',
+                            canonicalTranslation: pendingDog.foreignWord.value,
+                            transliteration: 'stale-value',
+                            romanizationStatus: 'ready',
+                            ttsFile: '',
+                            ttsStatus: 'unavailable',
+                            enrichmentStatus: 'ready',
+                            enrichment: DOG_TRANSLATION_WITH_ENRICHMENT.enrichment,
+                        }),
+                    })
+                } catch {
+                    // The expected abort can dispose the routed request first.
+                }
+            })
+
+            await translatorPage.goto()
+            await translatorPage.translateInput('dog')
+            await oldStatusStarted
+            await translatorPage.translateInput('cat')
+            await expect(translatorPage.translatedWord).toHaveText(readyCat.foreignWord.value)
+
+            releaseOldStatus()
+            await page.waitForTimeout(100)
+            await expect(translatorPage.translatedWord).toHaveText(readyCat.foreignWord.value)
+            await expect(translatorPage.translitDisplay).toHaveText('katu')
+            await expect(translatorPage.enrichmentPanel).not.toBeVisible()
+        })
+
+        test('cancels capability polling when navigation leaves the translator', async () => {
+            const pending = {
+                ...dogTranslationMockHy,
+                wordId: 4245,
+                ttsStatus: 'pending' as const,
+                ttsPending: true,
+                enrichmentStatus: 'unavailable' as const,
+                romanizationStatus: 'ready' as const,
+            }
+            let statusCalls = 0
+            await page.route('**/api/translate', route => {
+                const body = route.request().postDataJSON() as { word?: string }
+                const result = body.word === 'dog' ? pending : dogTranslationMockHy
+                return route.fulfill({ status: 200, body: JSON.stringify(result) })
+            })
+            await page.route('**/api/images**', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) }))
+            await page.route('**/api/language-status**', route => {
+                statusCalls += 1
+                return route.fulfill({
+                    status: 200,
+                    body: JSON.stringify({
+                        wordId: pending.wordId,
+                        lang: 'hy',
+                        canonicalTranslation: pending.foreignWord.value,
+                        transliteration: pending.transliteration,
+                        romanizationStatus: 'ready',
+                        ttsFile: '',
+                        ttsStatus: 'pending',
+                        enrichmentStatus: 'unavailable',
+                    }),
+                })
+            })
+
+            await translatorPage.goto()
+            await translatorPage.translateInput('dog')
+            await expect.poll(() => statusCalls).toBe(1)
+            await page.evaluate(() => document.dispatchEvent(new CustomEvent('app:page-change', {
+                detail: { page: 'library' },
+            })))
+            await page.waitForTimeout(1500)
+            expect(statusCalls).toBe(1)
+        })
+
         test('shows suggestions panel when translate API returns WORD_NOT_FOUND with suggestions', async () => {
             await page.route('**/api/translate', route =>
                 route.fulfill({ status: 400, body: WORD_NOT_FOUND_WITH_SUGGESTIONS })
@@ -205,7 +372,7 @@ test.describe('Translate English word', () => {
     })
 
     // ════════════════════════════════════════════════════════════════════════
-    // Language: Greek (code `el` — the app migrated gr → el)
+    // Language: Greek
     // Language state is pre-set via localStorage so the page boots with
     // sourceLang=en / targetLang=el (bypassing the UI language selector).
     // ════════════════════════════════════════════════════════════════════════
@@ -233,7 +400,7 @@ test.describe('Translate English word', () => {
 
             await expect(translatorPage.translatedWord).toHaveText('σκύλος')
 
-            // Greek supports transliteration since the gr → el migration
+            // Greek uses the deterministic romanization provider.
             await expect(translatorPage.translitDisplay).toHaveText('skýlos')
 
             await expect(translatorPage.sourceLangLabel).toHaveText('English')
@@ -288,8 +455,8 @@ test.describe('Translate English word', () => {
 
         })
 
-        // ── TTS: unavailable (Greek supports TTS, but this word has no file) ──
-        test('keeps all TTS buttons disabled when the Greek word has no sound file', async () => {
+        // ── TTS: active Greek Gemini profile ─────────────────────────────────
+        test('enables target audio when the Greek Aoede asset is ready', async () => {
             await page.addInitScript(() => {
                 // Study language must be Greek: the pair is locked to study ↔ English,
                 // so without this the app coerces the Greek target back to the default
@@ -300,16 +467,30 @@ test.describe('Translate English word', () => {
                 localStorage.setItem('targetLang', 'el')
             })
             await page.route('**/api/translate', route =>
-                route.fulfill({ status: 200, body: JSON.stringify(dogTranslationMockEl) })
+                route.fulfill({
+                    status: 200,
+                    body: JSON.stringify({
+                        ...dogTranslationMockEl,
+                        ttsFile: 'el/dog-aoede.mp3',
+                        ttsStatus: 'ready',
+                    }),
+                })
             )
             await page.route('**/api/images**', route =>
                 route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) })
+            )
+            await page.route('**/storage/v1/**', route =>
+                route.fulfill({
+                    status: 200,
+                    contentType: 'audio/mpeg',
+                    body: SILENT_WAV,
+                })
             )
             await translatorPage.goto()
             await translatorPage.translateInput('dog')
 
             await expect(translatorPage.sourceTtsBtn).toBeDisabled()
-            await expect(translatorPage.targetTtsBtn).toBeDisabled()
+            await expect(translatorPage.targetTtsBtn).toBeEnabled()
         })
     })
 })

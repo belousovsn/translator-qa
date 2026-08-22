@@ -7,11 +7,10 @@ import { catUnsplashMock } from '../mocks/imageMocks.js'
 // NOTE: the other milestone hooks (savedFirstCard, reachedCardGoal via the
 // Collection, importedDeck, playedGame, ranLearning) all require a non-anonymous
 // session — e.g. the Collection short-circuits to empty for guest scope — so
-// they belong in the authenticated test project, not this guest suite. Their
-// UI rendering is covered with seeded state in onboarding_quest.spec.ts.
+// they belong in the authenticated test project, not this guest suite.
 
 test.describe('Onboarding milestone hooks (guest-reachable)', () => {
-    test('translating a word advances the chip from 0/4 to 1/4', async ({ page }) => {
+    test('translating a word records the translated milestone', async ({ page }) => {
         const onboarding = new OnboardingPage(page)
         const translator = new TranslatorPage(page)
 
@@ -31,11 +30,11 @@ test.describe('Onboarding milestone hooks (guest-reachable)', () => {
         await onboarding.seedState({})
         await onboarding.goToTranslator()
 
-        await expect(onboarding.chipCount).toHaveText('0/4')
+        expect((await onboarding.readState())?.milestones?.translated).toBeFalsy()
         await translator.translateInput('dog')
-        await expect(onboarding.chipCount).toHaveText('1/4')
 
-        const state = await onboarding.readState()
-        expect(state?.milestones?.translated).toBe(true)
+        await expect
+            .poll(async () => (await onboarding.readState())?.milestones?.translated)
+            .toBe(true)
     })
 })
