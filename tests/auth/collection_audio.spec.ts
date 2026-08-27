@@ -17,6 +17,12 @@ test('plays imported and generated audio through the card-first resolver', async
         }
     })
 
+    // Armenian, because the collection only shows cards in the account's study
+    // language, and auth.setup.ts pins that account to 'hy' server-side. Seeding
+    // mainLang in localStorage is not an escape hatch: user_metadata.main_language
+    // overwrites it on every page load. If this fixture drifts back to another
+    // language the grid renders zero cards and the count assertion below fails.
+    // The subject here is the audio resolver; the language is incidental.
     await page.route('**/api/cards', route => route.fulfill({
         json: [
             {
@@ -24,10 +30,10 @@ test('plays imported and generated audio through the card-first resolver', async
                 created_at: Date.now(),
                 updated_at: Date.now(),
                 source_lang: 'en',
-                target_lang: 'el',
+                target_lang: 'hy',
                 source_word: 'week',
-                target_word: 'εβδομάδα',
-                transliteration: 'evdomada',
+                target_word: 'շաբաթ',
+                transliteration: 'shabat',
                 img_url_small: IMAGE_DATA_URL,
                 img_url_large: IMAGE_DATA_URL,
                 audio_url: IMPORTED_AUDIO_URL,
@@ -40,13 +46,13 @@ test('plays imported and generated audio through the card-first resolver', async
                 created_at: Date.now(),
                 updated_at: Date.now(),
                 source_lang: 'en',
-                target_lang: 'el',
+                target_lang: 'hy',
                 source_word: 'today',
-                target_word: 'σήμερα',
-                transliteration: 'simera',
+                target_word: 'այսօր',
+                transliteration: 'aysor',
                 img_url_small: IMAGE_DATA_URL,
                 img_url_large: IMAGE_DATA_URL,
-                ttsfile: 'el/today.mp3',
+                ttsfile: 'hy/today.mp3',
                 score: 0,
                 word_id: 42,
             },
