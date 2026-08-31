@@ -471,7 +471,7 @@ test.describe('First-run game path', () => {
         await expect(path.locator('[data-path-step="practice-1"]')).toHaveCount(0)
     })
 
-    test('skip ends the path for good and lands on the games list', async ({ page }) => {
+    test('skip ends the guided path but still shows the closing word-source map', async ({ page }) => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
@@ -481,12 +481,52 @@ test.describe('First-run game path', () => {
         const path = page.locator('#onboardingPathOverlay')
         await expect(path).toBeVisible()
         await path.locator('[data-path-skip]').click()
+
+        const finish = path.locator('[data-path-step="finish"]')
+        await expect(finish).toBeVisible()
+        await expect(finish).toContainText('Want more words?')
+        await expect(finish.locator('[data-word-source]')).toHaveCount(4)
+        await expect
+            .poll(async () => await page.evaluate(
+                () => JSON.parse(localStorage.getItem('translator.onboarding.path.v1') ?? '{}').status,
+            ))
+            .toBe('skipped')
+
+        await finish.locator('[data-path-finish]').click()
         await expect(path).toBeHidden()
         await expect(page.locator('#gamesPage')).toBeVisible()
+        expect(await page.evaluate(
+            () => JSON.parse(localStorage.getItem('translator.onboarding.path.v1') ?? '{}').status,
+        )).toBe('skipped')
 
         await page.reload({ waitUntil: 'networkidle' })
         await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
+    })
+
+    test('guided Games skip also opens the closing word-source map', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('mainLang', 'el')
+            localStorage.setItem('sourceLang', 'en')
+            localStorage.setItem('targetLang', 'el')
+            localStorage.setItem('translator.onboarding.path.v1', JSON.stringify({
+                status: 'active',
+                stepIndex: 3,
+                startedAt: Date.now(),
+            }))
+        })
+        await mockPathDependencies(page)
+        await page.goto('index.html', { waitUntil: 'networkidle' })
+
+        await expect(page.locator('#guidedGamesNotice')).toBeVisible({ timeout: 15_000 })
+        await page.locator('#guidedGamesSkip').click()
+
+        const path = page.locator('#onboardingPathOverlay')
+        await expect(path.locator('[data-path-step="finish"]')).toBeVisible()
+        await expect(path.locator('[data-word-source]')).toHaveCount(4)
+        expect(await page.evaluate(
+            () => JSON.parse(localStorage.getItem('translator.onboarding.path.v1') ?? '{}').status,
+        )).toBe('skipped')
     })
 
     test('leaving the first lesson unfinished opts out of the path', async ({ page }) => {
