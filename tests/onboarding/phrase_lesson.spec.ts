@@ -88,6 +88,7 @@ test.describe('Phrase Builder as a registered game', () => {
 
         const welcome = page.locator('#welcomeOverlay')
         await expect(welcome).toBeVisible()
+        await welcome.locator('#welcomeIntroContinue').click()
         await welcome.locator('button[data-lang="el"]').click()
         await welcome.locator('#welcomeStart').click()
 
