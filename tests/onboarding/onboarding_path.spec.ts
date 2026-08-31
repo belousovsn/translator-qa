@@ -226,8 +226,18 @@ async function mockPathDependencies(page: Page, options: PathMockOptions = {}): 
 async function chooseGreek(page: Page): Promise<void> {
     const welcome = page.locator('#welcomeOverlay')
     await expect(welcome).toBeVisible()
+    await welcome.locator('#welcomeIntroContinue').click()
     await welcome.locator('button[data-lang="el"]').click()
     await welcome.locator('#welcomeStart').click()
+}
+
+async function startFirstLesson(page: Page): Promise<void> {
+    const path = page.locator('#onboardingPathOverlay')
+    await expect(path.locator('[data-path-step="lesson-1"]')).toBeVisible()
+    await expect(path).toContainText('Let’s add your first words')
+    await expect(path).toContainText('saved to your collection')
+    await expect(path.locator('[data-path-continue]')).toHaveText('I’m ready')
+    await path.locator('[data-path-continue]').click()
 }
 
 /** Wait for the game iframe, then leave it the way a player does. */
@@ -240,23 +250,28 @@ async function playAndLeaveGame(page: Page): Promise<void> {
 }
 
 test.describe('First-run game path', () => {
-    test('keeps the language picker over the app until the first lesson is mounted', async ({ page }) => {
+    test('keeps onboarding over the app through the first lesson handoff', async ({ page }) => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await page.evaluate(() => {
             const welcome = document.querySelector<HTMLElement>('#welcomeOverlay')
             const game = document.querySelector<HTMLElement>('#gameOverlay')
+            const path = document.querySelector<HTMLElement>('#onboardingPathOverlay')
             const recordGap = () => {
-                if (welcome?.hidden && game?.classList.contains('hidden')) {
+                if (welcome?.hidden && path?.hidden && game?.classList.contains('hidden')) {
                     sessionStorage.setItem('onboarding-uncovered-gap', 'true')
                 }
             }
             const observer = new MutationObserver(recordGap)
             if (welcome) observer.observe(welcome, { attributes: true, attributeFilter: ['hidden'] })
+            if (path) observer.observe(path, { attributes: true, attributeFilter: ['hidden'] })
             if (game) observer.observe(game, { attributes: true, attributeFilter: ['class'] })
         })
 
         await chooseGreek(page)
+        await expect(page.locator('[data-path-step="lesson-1"]')).toBeVisible()
+        expect(await page.evaluate(() => sessionStorage.getItem('onboarding-uncovered-gap'))).toBeNull()
+        await startFirstLesson(page)
 
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(1)
         expect(await page.evaluate(() => sessionStorage.getItem('onboarding-uncovered-gap'))).toBeNull()
@@ -266,6 +281,7 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
 
         const lessonBody = page.locator('#gameOverlay iframe').contentFrame().locator('body')
         await expect(lessonBody).toHaveAttribute('data-launch-purpose', 'onboarding')
@@ -276,6 +292,7 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page, { anonymousSignInFails: true })
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
 
         // Guest auth is the normal fallback for a first lesson. If it is down,
         // sign-in must be visible above onboarding instead of the app appearing
@@ -301,20 +318,22 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
 
-        // Step 1 is the lesson game itself — no seam in front of it.
+        // The first lesson starts only after the learner accepts its short handoff.
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(1)
         await expect(page.locator('#gameOverlay iframe')).toHaveAttribute('src', /__stub-lesson/)
         await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
 
         await playAndLeaveGame(page)
 
-        // Seam 1: the point of the whole path — those five words are now a game.
+        // Seam 1: the point of the whole path — those words are now a game.
         const path = page.locator('#onboardingPathOverlay')
         await expect(path.locator('[data-path-step="practice-1"]')).toBeVisible()
-        await expect(path).toContainText('Five words saved')
-        await expect(path).toContainText('Now try playing a game')
-        await expect(path.locator('[data-path-continue]')).toHaveText('Start game')
+        await expect(path).toContainText('Words added')
+        await expect(path).toContainText('your first words are in your collection')
+        await expect(path).toContainText('Add more words to unlock more games')
+        await expect(path.locator('[data-path-continue]')).toHaveText('Play a game')
         await path.locator('[data-path-continue]').click()
 
         await expect(page.locator('#gameOverlay iframe')).toHaveAttribute('src', /__stub-practice/)
@@ -339,6 +358,7 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page, { practiceReportsMilestone: false })
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
         await playAndLeaveGame(page)
 
         const path = page.locator('#onboardingPathOverlay')
@@ -363,10 +383,11 @@ test.describe('First-run game path', () => {
         })
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
         await playAndLeaveGame(page)
 
         const path = page.locator('#onboardingPathOverlay')
-        await expect(path).toContainText('Now try playing a game')
+        await expect(path).toContainText('your first words are in your collection')
         await path.locator('[data-path-continue]').click()
 
         const handoff = page.locator('#practiceSummary')
@@ -426,6 +447,7 @@ test.describe('First-run game path', () => {
         await page.goto('index.html', { waitUntil: 'networkidle' })
         const welcome = page.locator('#welcomeOverlay')
         await expect(welcome).toBeVisible()
+        await welcome.locator('#welcomeIntroContinue').click()
         // Spanish is absent from the lesson game's `languages`.
         await welcome.locator('button[data-lang="es"]').click()
         await welcome.locator('#welcomeStart').click()
@@ -439,6 +461,7 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page, { games: [lessonGame] })
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
         await playAndLeaveGame(page)
 
         // No playable game in this environment, so the path steps over the seam
@@ -452,6 +475,7 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
         await playAndLeaveGame(page)
 
         const path = page.locator('#onboardingPathOverlay')
@@ -471,6 +495,7 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page, { lessonReportsResult: false })
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
         await playAndLeaveGame(page)
 
         await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
@@ -486,17 +511,48 @@ test.describe('First-run game path', () => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
+        await startFirstLesson(page)
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(1)
 
         await page.reload({ waitUntil: 'networkidle' })
 
-        // The lesson must not reopen by itself — the user gets a card with a button.
+        // The lesson must not reopen by itself — the user gets its handoff again.
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
         const path = page.locator('#onboardingPathOverlay')
         // Resume waits on the settings fetch, which is a real round-trip when the
         // suite runs against a deployed environment rather than localhost.
-        await expect(path.locator('[data-path-step="resume"]')).toBeVisible({ timeout: 15_000 })
+        await expect(path.locator('[data-path-step="lesson-1"]')).toBeVisible({ timeout: 15_000 })
         await path.locator('[data-path-continue]').click()
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(1)
+    })
+
+    test('finishes with four visual ways to add more words', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('mainLang', 'el')
+            localStorage.setItem('translator.onboarding.path.v1', JSON.stringify({
+                status: 'active',
+                stepIndex: 4,
+                startedAt: Date.now(),
+            }))
+        })
+        await mockPathDependencies(page)
+        await page.goto('index.html', { waitUntil: 'networkidle' })
+
+        const path = page.locator('#onboardingPathOverlay')
+        const finish = path.locator('[data-path-step="finish"]')
+        await expect(finish).toBeVisible({ timeout: 15_000 })
+        await expect(finish).toContainText('Want more words?')
+        await expect(finish.locator('[data-word-source]')).toHaveCount(4)
+        await expect(finish.locator('[data-word-source="phrase-builder"]')).toContainText('Find it in Games.')
+        await expect(finish.locator('[data-word-source="translator"]')).toContainText('Next word from Library')
+        await expect(finish.locator('[data-word-source="translator"]')).toContainText('Save them as cards.')
+        await expect(finish.locator('[data-word-source="add-deck"]')).toContainText('ready-made vocabulary decks')
+        await expect(finish.locator('[data-word-source="anki"]')).toContainText('Beta')
+        await expect(finish).toContainText('Everything you add becomes part of your collection.')
+        await expect(finish.locator('[data-path-finish]')).toHaveText('Got it')
+
+        await finish.locator('[data-path-finish]').click()
+        await expect(path).toBeHidden()
+        await expect(page.locator('#gamesPage')).toBeVisible()
     })
 })

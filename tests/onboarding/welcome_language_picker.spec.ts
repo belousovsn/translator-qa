@@ -1,14 +1,24 @@
 import { test, expect, type Page } from '@playwright/test'
 
-// First-run study-language picker (`#welcomeOverlay`). A brand-new guest — no
-// `mainLang` in localStorage and no study language on their profile — is asked
-// to pick a language before anything else. This is deliberately NOT using the
+// First-run welcome (`#welcomeOverlay`). A brand-new guest — no `mainLang` in
+// localStorage and no study language on their profile — first sees the product
+// idea, then picks a language. This is deliberately NOT using the
 // page-object goto() helpers: those seed `mainLang` to skip the picker, whereas
 // here the picker is the subject under test. Guarding it directly stops the
 // overlay (a modal that intercepts pointer events) from silently regressing and
 // blocking the rest of the suite again.
 
 async function blockNetwork(page: Page): Promise<void> {
+    await page.route('**/api/settings', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+            SUPABASE_URL: 'https://welcome-test.supabase.co',
+            SUPABASE_KEY: 'welcome-test-anon-key',
+            games: [],
+            anonAllowedGames: null,
+        }),
+    }))
     await page.route('**/api/translate', route =>
         route.fulfill({ status: 400, body: JSON.stringify({ code: 'WORD_NOT_FOUND', error: 'blocked', suggestions: [] }) }),
     )
@@ -16,21 +26,38 @@ async function blockNetwork(page: Page): Promise<void> {
 }
 
 const overlay = '#welcomeOverlay'
-const title = '#welcomeTitle'
+const intro = '#welcomeIntroStep'
+const introTitle = '#welcomeIntroTitle'
+const introContinue = '#welcomeIntroContinue'
+const languageStep = '#welcomeLanguageStep'
 const tiles = '#welcomeLangGrid button[data-lang]'
 const start = '#welcomeStart'
-// Greek hands the picker straight over to the first-run lesson path, which keeps
-// the overlay up until the lesson iframe mounts. This spec is about the picker
-// itself, so it deliberately chooses a language with no lesson behind it.
-const LESSON_LANG = 'el'
+
+async function continueToLanguages(page: Page): Promise<void> {
+    await page.locator(introContinue).click()
+    await expect(page.locator(intro)).toBeHidden()
+    await expect(page.locator(languageStep)).toBeVisible()
+}
 
 test.describe('First-run welcome language picker', () => {
-    test('a brand-new guest is shown the language picker', { tag: '@smoke' }, async ({ page }) => {
+    test('a brand-new guest sees the vocabulary-through-games idea first', { tag: '@smoke' }, async ({ page }) => {
         await blockNetwork(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
 
         await expect(page.locator(overlay)).toBeVisible()
-        await expect(page.locator(title)).toBeVisible()
+        await expect(page.locator(introTitle)).toHaveText('Build your vocabulary through games')
+        await expect(page.locator(intro)).toContainText('play them into memory')
+        await expect(page.locator(languageStep)).toBeHidden()
+        await expect(page.locator(introContinue)).toHaveText('Let’s go')
+    })
+
+    test('continuing reveals the language picker', async ({ page }) => {
+        await blockNetwork(page)
+        await page.goto('index.html', { waitUntil: 'networkidle' })
+
+        await continueToLanguages(page)
+        await expect(page.locator('#welcomeLanguageTitle')).toHaveText('What language are you learning?')
+        await expect(page.locator(languageStep)).toContainText('You can change this anytime.')
         // At least one study language is offered to choose from.
         await expect(page.locator(tiles).first()).toBeVisible()
         const count = await page.locator(tiles).count()
@@ -39,15 +66,22 @@ test.describe('First-run welcome language picker', () => {
 
     test('picking a language dismisses the overlay and pins the From label', async ({ page }) => {
         await blockNetwork(page)
+        // Keep this test focused on committing the language choice. The path's
+        // conditional Phrase Builder handoff has its own coverage.
+        await page.addInitScript(() => window.localStorage.setItem(
+            'translator.onboarding.path.v1',
+            JSON.stringify({ status: 'completed', stepIndex: 4, startedAt: Date.now() }),
+        ))
         await page.goto('index.html', { waitUntil: 'networkidle' })
+        await continueToLanguages(page)
 
-        const chosen = page.locator(`${tiles}:not([data-lang="${LESSON_LANG}"])`).first()
+        const chosen = page.locator(tiles).first()
         const chosenLang = await chosen.getAttribute('data-lang')
         const chosenName = (await chosen.locator('.profile-language-tile-name').textContent())?.trim() ?? ''
         expect(chosenLang).toBeTruthy()
         expect(chosenName.length).toBeGreaterThan(0)
 
-        // Tapping a tile only selects it — the choice is committed by "Start",
+        // Tapping a tile only selects it — the choice is committed by Continue,
         // which the tile click enables.
         await chosen.click()
         await expect(chosen).toHaveAttribute('aria-pressed', 'true')
