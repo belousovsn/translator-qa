@@ -14,6 +14,12 @@ const authStoragePath = path.join(__dirname, 'playwright/.auth/user.json');
  */
 export default defineConfig({
   testDir: './tests',
+  /* The translation specs drive several full page loads each and land around 25s
+     against the deployed test environment, so Playwright's 30s default left no
+     headroom: any jitter on the runner turned a passing spec into a red suite,
+     with a different victim each run. The app itself answers in milliseconds —
+     this is test length, not product latency. */
+  timeout: 60_000,
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
