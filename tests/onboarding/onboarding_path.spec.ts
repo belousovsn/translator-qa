@@ -452,9 +452,27 @@ test.describe('First-run game path', () => {
         await welcome.locator('button[data-lang="es"]').click()
         await welcome.locator('#welcomeStart').click()
 
-        await expect(page.locator('#gamesPage')).toBeVisible()
-        await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
+        // No guided run — but the closing map answers "where do more words come
+        // from?", which this learner needs as much as a Greek one.
+        const path = page.locator('#onboardingPathOverlay')
+        const finish = path.locator('[data-path-step="finish"]')
+        await expect(finish).toBeVisible()
+        await expect(finish).toContainText('Want more words?')
+        await expect(finish.locator('[data-word-source]')).toHaveCount(4)
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
+
+        // The path stays offerable: lessons published for this language later must
+        // still be able to start the run (#331).
+        expect(await page.evaluate(
+            () => JSON.parse(localStorage.getItem('translator.onboarding.path.v1') ?? '{}').status,
+        )).not.toBe('skipped')
+
+        await finish.locator('[data-path-finish]').click()
+        await expect(path).toBeHidden()
+        await expect(page.locator('#gamesPage')).toBeVisible()
+
+        await page.reload({ waitUntil: 'networkidle' })
+        await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
     })
 
     test('skips a practice step whose games are not registered here', async ({ page }) => {
@@ -538,13 +556,20 @@ test.describe('First-run game path', () => {
         await startFirstLesson(page)
         await playAndLeaveGame(page)
 
-        await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
-        await expect(page.locator('#gamesPage')).toBeVisible()
+        // Walking out is not distinguishable from playing and scoring nothing, so
+        // both end on the closing map rather than on a screen guessing which it was.
+        const path = page.locator('#onboardingPathOverlay')
+        await expect(path.locator('[data-path-step="finish"]')).toBeVisible()
+        await expect(path.locator('[data-word-source]')).toHaveCount(4)
         await expect
             .poll(async () => await page.evaluate(
                 () => JSON.parse(localStorage.getItem('translator.onboarding.path.v1') ?? '{}').status,
             ))
             .toBe('skipped')
+
+        await path.locator('[data-path-finish]').click()
+        await expect(path).toBeHidden()
+        await expect(page.locator('#gamesPage')).toBeVisible()
     })
 
     test('re-offers an interrupted step after a reload instead of re-launching it', async ({ page }) => {
