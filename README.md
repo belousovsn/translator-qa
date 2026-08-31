@@ -23,7 +23,7 @@ authenticated journeys, asynchronous/mocked backend behaviour, and API contract 
 | Translation direction | `tests/translation/language_selector.spec.ts` | Swap button reverses the From/To direction | No |
 | Onboarding | `tests/onboarding/onboarding_*.spec.ts` | Activation milestone hooks and the first-run `lesson -> game -> lesson` path | Mixed |
 | Phrase Builder lesson | `tests/onboarding/phrase_lesson.spec.ts` | The lesson game as a registered game: language gating, no card gate, and invite-flow precedence | No |
-| First-run welcome picker | `tests/onboarding/welcome_language_picker.spec.ts` | The study-language picker shown to brand-new guests, and that returning users skip it | No |
+| First-run welcome | `tests/onboarding/welcome_language_picker.spec.ts` | The concept screen and study-language picker shown to brand-new guests, and that returning users skip both | No |
 | Authenticated journeys | `tests/auth/*.spec.ts` | Positive flow, Words Pump queue flow, authenticated onboarding milestones | Yes |
 | Anki import | `tests/auth/anki_import.spec.ts` | Real `.apkg` import: subset preview, commit, private media, duplicate re-import messaging, newer-format instructions | Yes |
 | Card audio | `tests/auth/collection_audio.spec.ts` | Card-first audio resolver for imported vs generated sound | Yes |
@@ -65,8 +65,8 @@ The Playwright **projects** map to how you'd select tests:
 - `auth-tests` — authenticated journeys; depends on `auth-setup` and runs the
   `cards-auth-cleanup` teardown afterwards.
 
-> **First-run welcome picker.** The app shows brand-new guests a modal
-> study-language picker (`#welcomeOverlay`) that intercepts pointer events. The
+> **First-run welcome.** The app shows brand-new guests a modal concept screen
+> followed by a study-language picker (`#welcomeOverlay`) that intercepts pointer events. The
 > page objects seed a study language before navigating so it stays closed; the
 > `tests/onboarding/welcome_language_picker.spec.ts` spec is the one place that
 > exercises the picker itself. See `page_objects/first-run.ts`.
