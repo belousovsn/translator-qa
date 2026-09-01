@@ -367,7 +367,11 @@ test.describe('First-run game path', () => {
         await page.goBack()
 
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
-        await expect(path).toBeHidden()
+        // The run does not advance to lesson-2; it ends on the closing map, which
+        // still lists Phrase Builder because this language does have lessons.
+        await expect(path.locator('[data-path-step="finish"]')).toBeVisible()
+        await expect(path.locator('[data-path-step="lesson-2"]')).toHaveCount(0)
+        await expect(path.locator('[data-word-source]')).toHaveCount(4)
         await expect
             .poll(async () => await page.evaluate(
                 () => JSON.parse(localStorage.getItem('translator.onboarding.path.v1') ?? '{}').status,
@@ -434,12 +438,22 @@ test.describe('First-run game path', () => {
         await page.goto('index.html', { waitUntil: 'networkidle' })
         await chooseGreek(page)
 
-        await expect(page.locator('#gamesPage')).toBeVisible()
-        await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
+        // Nothing to run, so no guided path — but the closing map still answers
+        // where words come from. Phrase Builder is absent from it: pointing at a
+        // game this environment does not serve is worse than three sources.
+        const path = page.locator('#onboardingPathOverlay')
+        const finish = path.locator('[data-path-step="finish"]')
+        await expect(finish).toBeVisible()
+        await expect(finish.locator('[data-word-source]')).toHaveCount(3)
+        await expect(finish.locator('[data-word-source="phrase-builder"]')).toHaveCount(0)
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
         expect(await page.evaluate(
             () => localStorage.getItem('translator.onboarding.path.v1'),
         )).toBeNull()
+
+        await finish.locator('[data-path-finish]').click()
+        await expect(path).toBeHidden()
+        await expect(page.locator('#gamesPage')).toBeVisible()
     })
 
     test('does not start for a language the lesson game does not cover', async ({ page }) => {
@@ -458,7 +472,9 @@ test.describe('First-run game path', () => {
         const finish = path.locator('[data-path-step="finish"]')
         await expect(finish).toBeVisible()
         await expect(finish).toContainText('Want more words?')
-        await expect(finish.locator('[data-word-source]')).toHaveCount(4)
+        // Phrase Builder has no lesson in Spanish, so it is not offered as a source.
+        await expect(finish.locator('[data-word-source]')).toHaveCount(3)
+        await expect(finish.locator('[data-word-source="phrase-builder"]')).toHaveCount(0)
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
 
         // The path stays offerable: lessons published for this language later must
