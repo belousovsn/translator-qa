@@ -58,8 +58,44 @@ const publicRoutes = [
     '/third-party-games.html',
 ]
 
+// The English content surface (docs, blog, trust pages). It ships complete in
+// the initial HTML and is the half of the site a retrieval system actually
+// quotes, so it gets the same metadata gate as the acquisition pages.
+const contentRoutes = [
+    '/en/docs/',
+    '/en/docs/what-is-memdecks/',
+    '/en/docs/supported-languages/',
+    '/en/docs/add-your-first-words/',
+    '/en/docs/start-learning/',
+    '/en/docs/how-a-session-works/',
+    '/en/docs/learning-modes/',
+    '/en/docs/card-progress/',
+    '/en/docs/word-cards/',
+    '/en/docs/decks-and-packs/',
+    '/en/docs/games/',
+    '/en/docs/multiplayer/',
+    '/en/docs/spaced-repetition/',
+    '/en/docs/where-words-come-from/',
+    '/en/docs/glossary/',
+    '/en/docs/faq/',
+    '/en/blog/',
+    '/en/blog/how-memdecks-decides-when-to-show-a-card-again/',
+    '/en/blog/learning-a-non-latin-alphabet/',
+    '/en/blog/vocabulary-inside-a-phrase/',
+    '/en/blog/games-as-retrieval-practice/',
+    '/en/blog/first-200-words/',
+    '/en/blog/authors/sergey-belousov/',
+    '/en/pricing/',
+    '/en/about/',
+    '/en/compare/anki/',
+    '/en/compare/duolingo/',
+    '/en/compare/quizlet/',
+]
+
+const allIndexableRoutes = [...publicRoutes, ...contentRoutes]
+
 test.describe('public SEO surface', () => {
-    for (const route of publicRoutes) {
+    for (const route of allIndexableRoutes) {
         test(`${route} has complete indexable metadata`, async ({ page }) => {
             await page.goto(route, { waitUntil: 'domcontentloaded' })
 
@@ -133,7 +169,7 @@ test.describe('public SEO surface', () => {
         expect(sitemap.status()).toBe(200)
         const body = await sitemap.text()
         const urls = [...body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
-        expect(urls).toHaveLength(publicRoutes.length)
+        expect(urls).toHaveLength(allIndexableRoutes.length)
         expect(body).not.toMatch(/\/admin|\/api\/|reset-password|[?#].*<\/loc>/)
 
         for (const url of urls) {
@@ -162,6 +198,73 @@ test.describe('public SEO surface', () => {
             const response = await request.get(route, { maxRedirects: 0 })
             expect(response.status(), route).toBe(308)
             expect(response.headers().location).toBe(canonical)
+        }
+    })
+})
+
+test.describe('English content surface', () => {
+    for (const route of contentRoutes) {
+        test(`${route} is locale-tagged and attributed to one brand entity`, async ({ page }) => {
+            await page.goto(route, { waitUntil: 'domcontentloaded' })
+
+            const canonical = await page.locator('link[rel="canonical"]').getAttribute('href')
+            expect(canonical).toBe(`https://memdecks.com${route}`)
+
+            // Self-referencing hreflang: English is the only published locale, and
+            // the pair has to be present so adding one is a content change.
+            await expect(page.locator('link[hreflang="en"]')).toHaveAttribute('href', canonical!)
+            await expect(page.locator('link[hreflang="x-default"]')).toHaveAttribute('href', canonical!)
+
+            // One Organization entity, spelled the same way on every page.
+            const blocks = await page.locator('script[type="application/ld+json"]').allTextContents()
+            const organization = blocks
+                .map((block) => JSON.parse(block))
+                .find((entry) => entry['@type'] === 'Organization')
+            expect(organization, `${route} is missing Organization JSON-LD`).toBeTruthy()
+            expect(organization.name).toBe('MemDecks')
+            expect(organization['@id']).toBe('https://memdecks.com/#organization')
+            expect(Array.isArray(organization.sameAs) && organization.sameAs.length).toBeTruthy()
+
+            // Every content page states when its facts were last checked.
+            await expect(page.locator('.doc-meta time')).toHaveCount(1)
+        })
+    }
+
+    test('content pages do not overflow a mobile viewport', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 })
+        for (const route of ['/en/docs/', '/en/docs/supported-languages/', '/en/pricing/', '/en/compare/anki/', '/en/blog/first-200-words/']) {
+            await page.goto(route, { waitUntil: 'domcontentloaded' })
+            const dimensions = await page.evaluate(() => ({
+                viewport: document.documentElement.clientWidth,
+                content: document.documentElement.scrollWidth,
+            }))
+            expect(dimensions.content, `${route} has horizontal overflow`).toBeLessThanOrEqual(dimensions.viewport + 1)
+        }
+    })
+
+    test('every glossary link in the docs resolves to a defined term', async ({ page, request }) => {
+        await page.goto('/en/docs/glossary/', { waitUntil: 'domcontentloaded' })
+        const definedIds = await page.locator('.doc-glossary__entry').evaluateAll(
+            (nodes) => nodes.map((node) => node.id),
+        )
+        expect(definedIds.length).toBeGreaterThan(0)
+
+        for (const route of ['/en/docs/what-is-memdecks/', '/en/docs/card-progress/', '/en/docs/decks-and-packs/', '/en/pricing/']) {
+            const body = await (await request.get(route)).text()
+            const anchors = [...body.matchAll(/href="\/en\/docs\/glossary\/#([^"]+)"/g)].map((match) => match[1])
+            for (const anchor of anchors) {
+                expect(definedIds, `${route} links to an undefined glossary term: ${anchor}`).toContain(anchor)
+            }
+        }
+    })
+
+    test('the blog feed lists the published posts', async ({ request }) => {
+        const feed = await request.get('/en/blog/feed.xml')
+        expect(feed.status()).toBe(200)
+        const body = await feed.text()
+        const items = [...body.matchAll(/<link>([^<]+)<\/link>/g)].map((match) => match[1])
+        for (const route of contentRoutes.filter((entry) => entry.startsWith('/en/blog/') && entry !== '/en/blog/' && !entry.includes('/authors/'))) {
+            expect(items, `${route} is missing from the feed`).toContain(`https://memdecks.com${route}`)
         }
     })
 })
