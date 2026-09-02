@@ -374,3 +374,118 @@ test.describe('one visual language', () => {
         }
     })
 })
+
+test.describe('glossary hover preview', () => {
+    const PAGE = '/en/docs/word-cards/'
+
+    test('a glossary link previews its definition on hover, and it matches the glossary', async ({ page }) => {
+        await page.goto('/en/docs/glossary/', { waitUntil: 'domcontentloaded' })
+        const definition = (await page.locator('#card-hp dd').innerText()).replace(/\s+/g, ' ').trim()
+
+        await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
+        const preview = page.locator('#doc-term-preview')
+        await expect(preview).toBeHidden()
+
+        await page.locator('[data-term="card-hp"]').first().hover()
+        await expect(preview).toBeVisible()
+        await expect(preview.locator('strong')).toHaveText('Card HP')
+
+        // The preview is the glossary text, not a second definition someone
+        // wrote for the tooltip. If these drift, the term has two meanings.
+        const shown = (await preview.locator('span').innerText()).replace(/\s+/g, ' ').trim()
+        expect(definition).toContain(shown.slice(0, 80))
+    })
+
+    test('the preview stays on screen and never covers the link', async ({ page }) => {
+        await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
+        const preview = page.locator('#doc-term-preview')
+
+        for (const term of ['transliteration', 'tts', 'score', 'collection']) {
+            const link = page.locator(`[data-term="${term}"]`).first()
+            await link.scrollIntoViewIfNeeded()
+            await link.hover()
+            // Wait for the preview to be about *this* link, not the previous one.
+            await expect(link).toHaveAttribute('aria-describedby', 'doc-term-preview')
+            await expect(preview).toBeVisible()
+
+            const box = (await preview.boundingBox())!
+            const anchor = (await link.boundingBox())!
+            const viewport = page.viewportSize()!
+            expect(box.x, `${term}: preview off the left edge`).toBeGreaterThanOrEqual(0)
+            expect(box.y, `${term}: preview off the top edge`).toBeGreaterThanOrEqual(0)
+            expect(box.x + box.width, `${term}: preview off the right edge`).toBeLessThanOrEqual(viewport.width + 1)
+            expect(box.y + box.height, `${term}: preview off the bottom edge`).toBeLessThanOrEqual(viewport.height + 1)
+            const overlaps = box.y < anchor.y + anchor.height && box.y + box.height > anchor.y
+            expect(overlaps, `${term}: preview covers the link it describes`).toBe(false)
+        }
+    })
+
+    test('keyboard focus previews too, and Escape dismisses it', async ({ page }) => {
+        await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
+        const preview = page.locator('#doc-term-preview')
+        const link = page.locator('[data-term]').first()
+
+        await link.focus()
+        await expect(preview).toBeVisible()
+        await expect(link).toHaveAttribute('aria-describedby', 'doc-term-preview')
+
+        await page.keyboard.press('Escape')
+        await expect(preview).toBeHidden()
+        expect(await link.getAttribute('aria-describedby')).toBeNull()
+    })
+
+    test('scrolling dismisses the preview rather than stranding it', async ({ page }) => {
+        await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
+        const preview = page.locator('#doc-term-preview')
+        const link = page.locator('[data-term]').first()
+        await link.scrollIntoViewIfNeeded()
+        await link.hover()
+        await expect(preview).toBeVisible()
+
+        await page.mouse.wheel(0, 200)
+        await expect(preview).toBeHidden()
+    })
+
+    test('the preview never intercepts a click on the link', async ({ page }) => {
+        await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
+        const link = page.locator('[data-term="card-hp"]').first()
+        await link.scrollIntoViewIfNeeded()
+        await link.hover()
+        await expect(page.locator('#doc-term-preview')).toBeVisible()
+        await link.click()
+        await expect(page).toHaveURL(/\/en\/docs\/glossary\/#card-hp$/)
+    })
+
+    test('the payload carries only the terms the page links, and every one resolves', async ({ page }) => {
+        for (const route of ['/en/docs/word-cards/', '/en/docs/where-words-come-from/', '/en/pricing/']) {
+            await page.goto(route, { waitUntil: 'domcontentloaded' })
+            const { linked, shipped } = await page.evaluate(() => ({
+                linked: [...new Set([...document.querySelectorAll('[data-term]')].map((node) => (node as HTMLElement).dataset.term))],
+                shipped: Object.keys(JSON.parse(document.getElementById('glossary-previews')!.textContent!)),
+            }))
+            expect(linked.length, `${route} has no glossary links`).toBeGreaterThan(0)
+            expect(shipped.sort(), route).toEqual([...linked].sort())
+        }
+    })
+
+    test('the definitions are not rendered into the page text', async ({ page, request }) => {
+        // The glossary is the one canonical home for a definition. Shipping the
+        // preview as JSON keeps twenty near-duplicate chunks out of the corpus.
+        const body = await (await request.get(PAGE)).text()
+        const visible = body.replace(/<script[\s\S]*?<\/script>/gi, '')
+        expect(visible).not.toContain('The amount of practice a specific card needs')
+        expect(body).toContain('The amount of practice a specific card needs')
+        expect(await page.goto(PAGE).then(() => page.locator('body').innerText()))
+            .not.toContain('The amount of practice a specific card needs')
+    })
+
+    test('a touch device gets the link, not a tooltip', async ({ browser }) => {
+        const context = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 844 } })
+        const page = await context.newPage()
+        await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
+        // No hover on touch, so the script must not build the bubble at all.
+        expect(await page.locator('#doc-term-preview').count()).toBe(0)
+        await expect(page.locator('[data-term]').first()).toHaveAttribute('href', /\/en\/docs\/glossary\/#/)
+        await context.close()
+    })
+})
