@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 const productionStudyLanguages = [
     ['hy', 'Armenian'],
@@ -265,6 +265,112 @@ test.describe('English content surface', () => {
         const items = [...body.matchAll(/<link>([^<]+)<\/link>/g)].map((match) => match[1])
         for (const route of contentRoutes.filter((entry) => entry.startsWith('/en/blog/') && entry !== '/en/blog/' && !entry.includes('/authors/'))) {
             expect(items, `${route} is missing from the feed`).toContain(`https://memdecks.com${route}`)
+        }
+    })
+})
+
+test.describe('one visual language', () => {
+    // The seam #361 was about: a visitor crossing from a search result into the
+    // app must not see the palette or the typeface change. Both halves read
+    // tokens.css, so the check is that the tokens actually resolve the same.
+    const TOKENS = [
+        '--bg-base', '--bg-secondary', '--bg-panel', '--bg-panel-soft',
+        '--text-strong', '--text-base', '--text-muted', '--text-soft',
+        '--border', '--border-strong', '--ring',
+        '--accent', '--accent-strong', '--accent-soft',
+        '--action', '--action-line', '--action-shadow', '--mark',
+        '--font-body', '--font-display', '--font-brand',
+        '--shadow-sm', '--shadow-md', '--shadow-lg',
+    ]
+
+    async function readTokens(page: Page, route: string): Promise<Record<string, string>> {
+        await page.goto(route, { waitUntil: 'domcontentloaded' })
+        return page.evaluate((names: string[]) => {
+            const style = getComputedStyle(document.documentElement)
+            return Object.fromEntries(names.map((name: string) => [name, style.getPropertyValue(name).trim()]))
+        }, TOKENS)
+    }
+
+    test('the app, the content pages and the legal pages resolve identical tokens', async ({ page }) => {
+        const app = await readTokens(page, '/')
+        for (const name of TOKENS) {
+            expect(app[name], `the app does not define ${name}`).not.toBe('')
+        }
+
+        for (const route of ['/en/docs/', '/en/pricing/', '/decks/', '/languages/', '/contact.html', '/privacy.html']) {
+            expect(await readTokens(page, route), `${route} does not share the app's tokens`).toEqual(app)
+        }
+    })
+
+    test('every public surface stamps the same theme the app does', async ({ page }) => {
+        for (const route of ['/', '/en/docs/', '/en/pricing/', '/decks/', '/contact.html']) {
+            await page.goto(route, { waitUntil: 'domcontentloaded' })
+            expect(await page.evaluate(() => document.documentElement.dataset.theme), route).toBe('light')
+        }
+    })
+
+    test('content pages use the display serif for headings and the brand face for the wordmark', async ({ page }) => {
+        await page.goto('/en/docs/card-progress/', { waitUntil: 'domcontentloaded' })
+        const fonts = await page.evaluate(() => ({
+            h1: getComputedStyle(document.querySelector('h1')!).fontFamily,
+            h2: getComputedStyle(document.querySelector('.doc-section h2')!).fontFamily,
+            body: getComputedStyle(document.body).fontFamily,
+            brand: getComputedStyle(document.querySelector('.seo-brand')!).fontFamily,
+            display: getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim(),
+            bodyToken: getComputedStyle(document.documentElement).getPropertyValue('--font-body').trim(),
+            brandToken: getComputedStyle(document.documentElement).getPropertyValue('--font-brand').trim(),
+        }))
+        // Computed font-family drops the quotes around single-word families, so
+        // compare the stacks rather than the strings.
+        const families = (stack: string) => stack.split(',').map((name) => name.trim().replace(/^["']|["']$/g, ''))
+
+        expect(families(fonts.h1)).toEqual(families(fonts.display))
+        expect(families(fonts.h2)).toEqual(families(fonts.display))
+        expect(families(fonts.body)).toEqual(families(fonts.bodyToken))
+        expect(families(fonts.brand)).toEqual(families(fonts.brandToken))
+    })
+
+    test('small labels on public pages clear AA against the page ground', async ({ page }) => {
+        // --text-soft measures 3.76:1 on the parchment ground; eyebrows and table
+        // headers are ~12px, so they need 4.5:1 and must use --text-muted.
+        for (const route of ['/en/docs/supported-languages/', '/en/pricing/', '/decks/travel-vocabulary/', '/languages/']) {
+            await page.goto(route, { waitUntil: 'domcontentloaded' })
+            const failures = await page.evaluate(() => {
+                const luminance = (colour: string) => {
+                    const [r, g, b] = (colour.match(/\d+/g) ?? []).slice(0, 3).map(Number).map((value: number) => {
+                        const channel = value / 255
+                        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+                    })
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+                }
+                const contrast = (foreground: string, background: string) => {
+                    const a = luminance(foreground)
+                    const b = luminance(background)
+                    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+                }
+                // The page paints its ground with gradients, so sample the token.
+                const ground = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim()
+                const probe = document.createElement('span')
+                probe.style.color = ground
+                document.body.appendChild(probe)
+                const groundRgb = getComputedStyle(probe).color
+                probe.remove()
+
+                const selectors = [
+                    '.seo-eyebrow', '.seo-kicker', '.seo-card__meta', '.seo-facts dt',
+                    '.doc-breadcrumbs ol', '.doc-meta', '.doc-toc__title',
+                    '.doc-table caption', '.doc-table thead th', '.doc-note', '.doc-related__title',
+                ]
+                const bad = []
+                for (const selector of selectors) {
+                    const element = document.querySelector(selector)
+                    if (!element) continue
+                    const ratio = contrast(getComputedStyle(element).color, groundRgb)
+                    if (ratio < 4.5) bad.push(`${selector} = ${ratio.toFixed(2)}`)
+                }
+                return bad
+            })
+            expect(failures, route).toEqual([])
         }
     })
 })
