@@ -489,3 +489,62 @@ test.describe('glossary hover preview', () => {
         await context.close()
     })
 })
+
+test.describe('the docs tell the truth about the language set', () => {
+    // The build can check the docs against the language *registry*, but not
+    // against ENABLED_LANGUAGES — that is deployment config, and only a live
+    // environment knows it. This is the check that catches "we turned a
+    // language on (or off) and the documentation still says sixteen".
+    test('the supported-languages page matches what this environment actually serves', async ({ page, request }) => {
+        const settings = await (await request.get('/api/settings')).json()
+        const served: string[] = (settings.enabledLanguages ?? []).filter((code: string) => code !== 'en')
+        expect(served.length, 'the environment reports no study languages').toBeGreaterThan(0)
+
+        await page.goto('/en/docs/supported-languages/', { waitUntil: 'domcontentloaded' })
+        const documented = await page.locator('.doc-table tbody th').allInnerTexts()
+
+        expect(documented.length, 'the page lists a different number of languages than the app serves')
+            .toBe(served.length)
+
+        // The page states the count in prose too, and prose is what gets quoted.
+        const intro = await page.locator('.doc-hero__intro').innerText()
+        expect(intro, 'the intro states a count that does not match the table')
+            .toContain(String(served.length))
+
+        // Same list, by English name, in both directions.
+        const namesInApp = new Map<string, string>(
+            (settings.languages ?? []).map((entry: { code: string, englishName: string }) => [entry.code, entry.englishName]),
+        )
+        for (const code of served) {
+            const name = namesInApp.get(code)
+            if (!name) continue // built-in languages are not streamed as descriptors
+            expect(documented, `the app serves ${name} (${code}) but the docs do not list it`).toContain(name)
+        }
+    })
+
+    // Prose spells small numbers out, so the assertion has to accept either form.
+    const NUMBER_WORDS = [
+        'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+        'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
+        'nineteen', 'twenty',
+    ]
+    const spell = (value: number) => NUMBER_WORDS[value] ?? String(value)
+
+    test('the roster is stated identically wherever the docs repeat it', async ({ page }) => {
+        await page.goto('/en/docs/supported-languages/', { waitUntil: 'domcontentloaded' })
+        const table = await page.locator('.doc-table tbody th').allInnerTexts()
+        const count = table.length
+
+        for (const [route, selector] of [
+            ['/en/docs/', '#getting-started'],
+            ['/en/docs/what-is-memdecks/', '.doc-hero__intro'],
+            ['/en/docs/faq/', '#q4 p'],
+            ['/en/about/', '.doc-table'],
+        ] as const) {
+            await page.goto(route, { waitUntil: 'domcontentloaded' })
+            const text = (await page.locator(selector).first().innerText()).toLowerCase()
+            const stated = text.includes(String(count)) || text.includes(spell(count))
+            expect(stated, `${route} does not state the language count as ${count}`).toBe(true)
+        }
+    })
+})
