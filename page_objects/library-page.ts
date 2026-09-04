@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
-import { suppressFirstRunWelcome } from './first-run.js'
+import { suppressFirstRunWelcome, suppressTabIntros } from './first-run.js'
 
 export class LibraryPage {
     readonly page: Page
@@ -22,6 +22,7 @@ export class LibraryPage {
 
     async goto(): Promise<void> {
         await suppressFirstRunWelcome(this.page)
+        await suppressTabIntros(this.page)
         await this.page.goto('index.html', { waitUntil: 'networkidle' })
         await this.navLink.click()
         await this.decksTab.click()

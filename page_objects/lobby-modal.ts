@@ -1,5 +1,5 @@
 import { type Page, type Locator, expect } from '@playwright/test'
-import { suppressFirstRunWelcome } from './first-run.js'
+import { suppressFirstRunWelcome, suppressTabIntros } from './first-run.js'
 
 /**
  * Page Object for the Games page grid and the multiplayer lobby modal
@@ -67,6 +67,7 @@ export class LobbyPage {
      *  or a guest the caller has prepared). */
     async gotoGames(): Promise<void> {
         await suppressFirstRunWelcome(this.page)
+        await suppressTabIntros(this.page)
         await this.page.goto('index.html', { waitUntil: 'networkidle' })
         await this.gamesNavLink.click()
     }

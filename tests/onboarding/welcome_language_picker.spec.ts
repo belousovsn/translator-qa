@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { suppressTabIntros } from '../../page_objects/first-run.js'
 
 // First-run welcome (`#welcomeOverlay`). A brand-new guest — no `mainLang` in
 // localStorage and no study language on their profile — first sees the product
@@ -38,6 +39,13 @@ async function continueToLanguages(page: Page): Promise<void> {
     await expect(page.locator(intro)).toBeHidden()
     await expect(page.locator(languageStep)).toBeVisible()
 }
+
+// These specs drive the app directly rather than through a page object, so they
+// seed the "tab notes already read" state themselves: the note is a modal that
+// swallows the nav and game-card clicks below.
+test.beforeEach(async ({ page }) => {
+    await suppressTabIntros(page)
+})
 
 test.describe('First-run welcome language picker', () => {
     test('a brand-new guest sees the vocabulary-through-games idea first', { tag: '@smoke' }, async ({ page }) => {

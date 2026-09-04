@@ -1,5 +1,5 @@
 import { type Page } from '@playwright/test'
-import { suppressFirstRunWelcome } from './first-run.js'
+import { suppressFirstRunWelcome, suppressTabIntros } from './first-run.js'
 
 /** Mirror of the client's OnboardingState shape (see onboardingService.ts). */
 export type OnboardingMilestones = {
@@ -67,6 +67,7 @@ export class OnboardingPage {
     async goToTranslator(): Promise<void> {
         // Returning-user state so the first-run welcome picker can't block clicks.
         await suppressFirstRunWelcome(this.page)
+        await suppressTabIntros(this.page)
         await this.page.goto('index.html?view=translator', { waitUntil: 'networkidle' })
     }
 }

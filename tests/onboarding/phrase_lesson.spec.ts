@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { suppressTabIntros } from '../../page_objects/first-run.js'
+
 /**
  * Phrase Builder lives in its own repo and is registered like any other game, so
  * the host's job is narrow: list it for the languages it declares, launch it
@@ -36,6 +38,13 @@ async function mockGames(page: Page): Promise<void> {
         await route.fulfill({ response, json })
     })
 }
+
+// These specs drive the app directly rather than through a page object, so they
+// seed the "tab notes already read" state themselves: the note is a modal that
+// swallows the nav and game-card clicks below.
+test.beforeEach(async ({ page }) => {
+    await suppressTabIntros(page)
+})
 
 test.describe('Phrase Builder as a registered game', () => {
     test('is hidden for a study language it does not declare', async ({ page }) => {

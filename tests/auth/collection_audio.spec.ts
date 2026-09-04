@@ -1,8 +1,16 @@
 import { expect, test } from '@playwright/test'
+import { suppressTabIntros } from '../../page_objects/first-run.js'
 
 const IMAGE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 const IMPORTED_AUDIO_URL = 'https://media.test/imported-audio.mp3?token=private'
 const GENERATED_AUDIO_URL = 'https://media.test/generated-audio.mp3?token=private'
+
+// These specs drive the app directly rather than through a page object, so they
+// seed the "tab notes already read" state themselves: the note is a modal that
+// swallows the nav and game-card clicks below.
+test.beforeEach(async ({ page }) => {
+    await suppressTabIntros(page)
+})
 
 test('plays imported and generated audio through the card-first resolver', async ({ page }) => {
     await page.addInitScript(() => {

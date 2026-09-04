@@ -1,5 +1,5 @@
 import {type Page, type Locator, expect} from '@playwright/test'
-import { suppressFirstRunWelcome } from './first-run.js'
+import { suppressFirstRunWelcome, suppressTabIntros } from './first-run.js'
 
 export class TranslatorPage {
     readonly page: Page;
@@ -85,6 +85,7 @@ async goto() {
     // Returning-user state so the first-run welcome picker can't block clicks.
     // No-ops if a test already seeded a study language (e.g. Greek).
     await suppressFirstRunWelcome(this.page)
+    await suppressTabIntros(this.page)
     await this.page.goto('index.html', {waitUntil: 'networkidle'})
     await this.page.locator('nav.nav-panel > ul > li > a',
         {hasText: 'Translator'}

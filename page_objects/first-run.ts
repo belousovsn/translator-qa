@@ -31,3 +31,37 @@ export async function suppressFirstRunWelcome(page: Page, mainLang: string = 'hy
         }
     }, mainLang)
 }
+
+/**
+ * Suppress the one-off "what this tab is for" notes (`.tab-intro-overlay`).
+ *
+ * The app explains each tab the first time it is opened. The note is built on
+ * the same modal shell as the save dialog, so like the welcome picker it sits
+ * over the page and intercepts pointer events: a nav click resolves to the
+ * link, lands on the overlay, and retries until the test times out.
+ *
+ * Seeding every tab as already seen makes the browser look like a device that
+ * has read them. The app keeps that state under `translator.tabIntro.v1` as a
+ * per-tab map, written on dismissal.
+ *
+ * Like `suppressFirstRunWelcome`, this only seeds when the key is absent, so a
+ * test that wants a note on screen can pre-seed its own state and win
+ * regardless of call order. Must be called before the navigation that boots
+ * the app.
+ */
+export async function suppressTabIntros(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        try {
+            if (window.localStorage.getItem('translator.tabIntro.v1') === null) {
+                window.localStorage.setItem('translator.tabIntro.v1', JSON.stringify({
+                    games: true,
+                    dictionary: true,
+                    library: true,
+                    translator: true,
+                }))
+            }
+        } catch {
+            /* storage unavailable — nothing to seed */
+        }
+    })
+}

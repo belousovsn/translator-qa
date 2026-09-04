@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { suppressFirstRunWelcome } from '../../page_objects/first-run.js'
+import { suppressFirstRunWelcome, suppressTabIntros } from '../../page_objects/first-run.js'
 
 // Focused learning ("study set"): on the Games page the player can narrow games
 // to a hand-picked set of cards instead of the whole collection. The selection
@@ -80,6 +80,7 @@ async function injectTestGame(page: Page, minCards: number): Promise<void> {
 
 async function gotoGames(page: Page): Promise<void> {
     await suppressFirstRunWelcome(page)
+    await suppressTabIntros(page)
     await page.goto('index.html', { waitUntil: 'networkidle' })
     await page.locator('#gamesNavLink').click()
 }

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { suppressTabIntros } from '../../page_objects/first-run.js'
 
 /**
  * Every step of the path — lesson included — is a registered game in the iframe,
@@ -249,6 +250,13 @@ async function playAndLeaveGame(page: Page): Promise<void> {
     await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
 }
 
+// These specs drive the app directly rather than through a page object, so they
+// seed the "tab notes already read" state themselves: the note is a modal that
+// swallows the nav and game-card clicks below.
+test.beforeEach(async ({ page }) => {
+    await suppressTabIntros(page)
+})
+
 test.describe('First-run game path', () => {
     test('keeps onboarding over the app through the first lesson handoff', async ({ page }) => {
         await mockPathDependencies(page)
@@ -471,7 +479,7 @@ test.describe('First-run game path', () => {
         const path = page.locator('#onboardingPathOverlay')
         const finish = path.locator('[data-path-step="finish"]')
         await expect(finish).toBeVisible()
-        await expect(finish).toContainText('Want more words?')
+        await expect(finish).toContainText('What’s next?')
         // Phrase Builder has no lesson in Spanish, so it is not offered as a source.
         await expect(finish.locator('[data-word-source]')).toHaveCount(3)
         await expect(finish.locator('[data-word-source="phrase-builder"]')).toHaveCount(0)
@@ -518,7 +526,7 @@ test.describe('First-run game path', () => {
 
         const finish = path.locator('[data-path-step="finish"]')
         await expect(finish).toBeVisible()
-        await expect(finish).toContainText('Want more words?')
+        await expect(finish).toContainText('What’s next?')
         await expect(finish.locator('[data-word-source]')).toHaveCount(4)
         await expect
             .poll(async () => await page.evaluate(
@@ -622,14 +630,14 @@ test.describe('First-run game path', () => {
         const path = page.locator('#onboardingPathOverlay')
         const finish = path.locator('[data-path-step="finish"]')
         await expect(finish).toBeVisible({ timeout: 15_000 })
-        await expect(finish).toContainText('Want more words?')
+        await expect(finish).toContainText('What’s next?')
         await expect(finish.locator('[data-word-source]')).toHaveCount(4)
-        await expect(finish.locator('[data-word-source="phrase-builder"]')).toContainText('Find it in Games.')
-        await expect(finish.locator('[data-word-source="translator"]')).toContainText('Next word from Library')
-        await expect(finish.locator('[data-word-source="translator"]')).toContainText('Save them as cards.')
-        await expect(finish.locator('[data-word-source="add-deck"]')).toContainText('ready-made vocabulary decks')
+        await expect(finish.locator('[data-word-source="phrase-builder"]')).toContainText('in Games')
+        await expect(finish).toContainText('Get more words')
+        await expect(finish.locator('[data-word-source="translator"]')).toContainText('Translate your own words and save them as cards.')
+        await expect(finish.locator('[data-word-source="add-deck"]')).toContainText('Add a deck someone already built.')
         await expect(finish.locator('[data-word-source="anki"]')).toContainText('Beta')
-        await expect(finish).toContainText('Everything you add becomes part of your collection.')
+        await expect(finish).toContainText('Playing is how a card advances; the Collection shows how far each one has come.')
         await expect(finish.locator('[data-path-finish]')).toHaveText('Got it')
 
         await finish.locator('[data-path-finish]').click()
