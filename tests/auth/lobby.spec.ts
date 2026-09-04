@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { LobbyPage } from '../../page_objects/lobby-modal.js'
+import { suppressTabIntros } from '../../page_objects/first-run.js'
 
 // Live lobby behaviour, driven through the app's Games page. These talk to the
 // real lobby service (LOBBY_URL from /api/settings) over socket.io, so they
@@ -139,6 +140,7 @@ test.describe('Multiplayer lobby (Words Tetris)', () => {
             // Greek study language; also marks the guest as returning so the
             // first-run welcome picker stays closed.
             await guestPage.addInitScript(() => localStorage.setItem('mainLang', 'el'))
+            await suppressTabIntros(guestPage)
             await guestPage.goto('index.html', { waitUntil: 'networkidle' })
             await guestPage.locator('#gamesNavLink').click()
 

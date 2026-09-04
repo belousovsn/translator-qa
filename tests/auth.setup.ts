@@ -1,7 +1,7 @@
 import {test as setup} from '@playwright/test';
 import path from 'path';
 import {Auth} from './../page_objects/auth-modal.js'
-import { suppressFirstRunWelcome } from '../page_objects/first-run.js'
+import { suppressFirstRunWelcome, suppressTabIntros } from '../page_objects/first-run.js'
 import { getSupabase } from './supabase-client.js'
 import { fileURLToPath } from 'url';
 import { requireTestCredentials } from '../src/config.js'
@@ -50,6 +50,8 @@ setup('authenticate', async ({page}) => {
     // Before sign-in the page is a fresh guest, so suppress the first-run welcome
     // picker that would otherwise cover the Profile/sign-in controls.
     await suppressFirstRunWelcome(page)
+    // The tab notes are modals too, and Profile's nav link is behind the first one.
+    await suppressTabIntros(page)
     await page.goto('index.html', {waitUntil: 'networkidle'})
     await auth.signIn(email, password)
     await page.context().storageState({ path: authFile });
