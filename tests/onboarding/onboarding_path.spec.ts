@@ -414,6 +414,15 @@ test.describe('First-run game path', () => {
             localStorage.setItem('mainLang', 'el')
             localStorage.setItem('sourceLang', 'en')
             localStorage.setItem('targetLang', 'el')
+            // This test clicks the Games tab, and the app explains a tab the first
+            // time it is opened with a modal over it. Mark them read.
+            localStorage.setItem('translator.tabIntro.v1', JSON.stringify({
+                games: true,
+                dictionary: true,
+                library: true,
+                translator: true,
+                profile: true,
+            }))
         })
         await mockPathDependencies(page, {
             games: [skywordGame],
