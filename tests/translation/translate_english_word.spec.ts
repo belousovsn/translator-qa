@@ -2,7 +2,12 @@
 
 import { test, expect, BrowserContext, Page } from '@playwright/test'
 import { TranslatorPage } from '../../page_objects/translator-page.js'
-import { dogTranslationMockHy, dogTranslationMockHyWithTts, dogTranslationMockEl } from '../mocks/translationMocks.js'
+import {
+    dogEnrichmentHy,
+    dogTranslationMockHy,
+    dogTranslationMockHyWithTts,
+    dogTranslationMockEl,
+} from '../mocks/translationMocks.js'
 import { catUnsplashMock } from '../mocks/imageMocks.js'
 
 const WORD_NOT_FOUND_WITH_SUGGESTIONS = JSON.stringify({
@@ -18,17 +23,14 @@ const WORD_NOT_FOUND_WITHOUT_SUGGESTIONS = JSON.stringify({
 
 const DOG_TRANSLATION_WITH_ENRICHMENT = {
     ...dogTranslationMockHy,
-    enrichment: {
-        synonyms: ['hound', 'canine'],
-        examples: [
-            {
-                source: 'The dog runs in the yard',
-                translation: 'Շունը վազում է բակում',
-                targetToken: 'dog',
-            },
-        ],
-    },
+    enrichment: dogEnrichmentHy,
 }
+/** Labels of the meaning tabs, sentence-cased from each sense's brief gloss. */
+const SENSE_TAB_LABELS = [
+    'Domesticated canine animal',
+    'Contemptible person',
+    'To follow persistently',
+]
 /** A tiny valid audio blob (silence WAV header) used to satisfy TTS download */
 const SILENT_WAV = Buffer.from('52494646...', 'hex')
 
@@ -94,7 +96,7 @@ test.describe('Translate English word', () => {
         })
 
         // ── enrichment from translate payload ───────────────────────────────
-        test('renders enrichment panel when translate response includes enrichment', async () => {
+        test('renders the primary meaning: its synonyms, its examples, its grammar', async () => {
             await page.route('**/api/translate', route =>
                 route.fulfill({ status: 200, body: JSON.stringify(DOG_TRANSLATION_WITH_ENRICHMENT) })
             )
@@ -105,9 +107,71 @@ test.describe('Translate English word', () => {
             await translatorPage.translateInput('dog')
 
             await expect(translatorPage.enrichmentPanel).toBeVisible()
-            await expect(translatorPage.synonymsList.locator('.chip')).toHaveText(['hound', 'canine'])
-            await expect(translatorPage.examplesList.locator('.example-item')).toHaveCount(1)
-            await expect(translatorPage.examplesList.locator('mark.example-highlight')).toContainText('dog')
+            // The panel shows one meaning at a time — the primary one first.
+            await expect(translatorPage.selectedSense).toHaveAttribute('data-sense-key', 'main')
+            await expect(translatorPage.synonymChips).toHaveText([/շնիկ/, /սուն/])
+            // A synonym carries its own transliteration, note and register.
+            await expect(translatorPage.synonymChips.first()).toContainText('shnik · Diminutive · Colloquial')
+            await expect(translatorPage.enrichmentGrammarChips).toHaveText(['Noun', 'Masculine'])
+            await expect(translatorPage.exampleItems).toHaveCount(2)
+            // The study-language sentence is what carries the highlight; the
+            // English line under it is the translation of that sentence.
+            await expect(translatorPage.exampleItems.first().locator('mark.example-highlight'))
+                .toHaveText('Շունը')
+            await expect(translatorPage.exampleItems.first()).toContainText('The dog is barking.')
+        })
+
+        // ── one meaning's content never leaks into another (#424, #457) ─────
+        test('switches meanings without mixing their synonyms or examples', async () => {
+            await page.route('**/api/translate', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(DOG_TRANSLATION_WITH_ENRICHMENT) })
+            )
+            await page.route('**/api/images**', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) })
+            )
+            await translatorPage.goto()
+            await translatorPage.translateInput('dog')
+
+            await expect(translatorPage.senseTabs).toHaveText(SENSE_TAB_LABELS)
+            await expect(translatorPage.senseTabs.first()).toHaveAttribute('aria-selected', 'true')
+
+            await translatorPage.selectSense(SENSE_TAB_LABELS[1])
+
+            await expect(translatorPage.selectedSense).toHaveAttribute('data-sense-key', 'scoundrel')
+            await expect(translatorPage.synonymChips).toHaveText([/անպիտան/])
+            // The second meaning has no examples of its own, and must not borrow
+            // the first one's.
+            await expect(translatorPage.exampleItems).toHaveCount(0)
+
+            // A meaning with nothing but a headword says so, and keeps the tabs
+            // on screen — otherwise picking it would remove the way back (#457).
+            await translatorPage.selectSense(SENSE_TAB_LABELS[2])
+            await expect(translatorPage.enrichmentEmptyNote)
+                .toHaveText('No synonyms or examples for this meaning yet.')
+            await expect(translatorPage.senseTabs).toHaveCount(3)
+        })
+
+        // ── examples filtered by the form they use (#458) ────────────────────
+        test('filters a meaning’s examples down to one target form', async () => {
+            await page.route('**/api/translate', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(DOG_TRANSLATION_WITH_ENRICHMENT) })
+            )
+            await page.route('**/api/images**', route =>
+                route.fulfill({ status: 200, body: JSON.stringify(catUnsplashMock) })
+            )
+            await translatorPage.goto()
+            await translatorPage.translateInput('dog')
+
+            const filters = translatorPage.enrichmentPanel.locator('.sense-form-filter')
+            await expect(filters).toHaveText([
+                'All forms',
+                'շունը · nominative singular definite',
+                'շան · genitive singular',
+            ])
+
+            await filters.nth(2).click()
+            await expect(translatorPage.exampleItems).toHaveCount(1)
+            await expect(translatorPage.exampleItems).toContainText('I am playing with the dog.')
         })
 
         // ── suggestions: present ─────────────────────────────────────────────
@@ -154,10 +218,10 @@ test.describe('Translate English word', () => {
 
             await expect(translatorPage.translatedWord).toHaveText(pending.foreignWord.value)
             await expect(translatorPage.enrichmentPanel).toBeVisible()
-            await expect(translatorPage.synonymsList.locator('.chip--skeleton')).toHaveCount(5)
+            await expect(translatorPage.enrichmentSkeletonChips).toHaveCount(5)
 
             releaseStatus()
-            await expect(translatorPage.synonymsList.locator('.chip')).toHaveText(['hound', 'canine'])
+            await expect(translatorPage.synonymChips).toHaveText([/շնիկ/, /սուն/])
             await expect.poll(() => statusCalls).toBe(1)
         })
 

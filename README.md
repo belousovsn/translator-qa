@@ -18,8 +18,8 @@ authenticated journeys, asynchronous/mocked backend behaviour, and API contract 
 | Suite | Path | What it checks | Needs sign-in? |
 | --- | --- | --- | --- |
 | Translator UI (unauth) | `tests/unauth/translator.spec.ts` | Input, on-screen keyboard, initial section visibility; auto-translate blocked via route mocking for deterministic load | No |
-| Post-sign-in content load | `tests/unauth/sign_in_content_load.spec.ts` | Library + collection render immediately after signing in; backend responses mocked | Yes |
-| Translation | `tests/translation/translate_english_word.spec.ts` | English-word translation flow and panel behaviour (Armenian + Greek) | Mixed |
+| Post-sign-in content load | `tests/unauth/sign_in_content_load.spec.ts` | Decks, the Translator's Packs sheet and the collection render immediately after signing in; backend responses mocked | Yes |
+| Translation | `tests/translation/translate_english_word.spec.ts` | English-word translation flow and panel behaviour (Armenian + Greek), including per-meaning synonyms, examples and form filters | Mixed |
 | Translation direction | `tests/translation/language_selector.spec.ts` | Swap button reverses the From/To direction | No |
 | Onboarding | `tests/onboarding/onboarding_*.spec.ts` | Activation milestone hooks and the first-run `lesson -> game -> lesson` path | Mixed |
 | Phrase Builder lesson | `tests/onboarding/phrase_lesson.spec.ts` | The lesson game as a registered game: language gating, no card gate, and invite-flow precedence | No |
@@ -42,7 +42,7 @@ src/
   types.ts        # API/domain types (mirrors the app's public shapes; decoupled from the app repo)
   config.ts       # dotenv loader + validated env access (TEST_BASE_URL, credentials, ADMIN_API_KEY)
 page_objects/     # Page Object Model: auth modal, translator, dictionary, onboarding
-  first-run.ts    # helper: seed a study language so the first-run welcome picker can't block clicks
+  first-run.ts    # helpers: seed a study language and mark the per-tab intro notes read
 tests/
   unauth/         # no authentication required (or sign-in with all backend calls mocked)
   translation/    # translation flows
@@ -65,11 +65,13 @@ The Playwright **projects** map to how you'd select tests:
 - `auth-tests` — authenticated journeys; depends on `auth-setup` and runs the
   `cards-auth-cleanup` teardown afterwards.
 
-> **First-run welcome.** The app shows brand-new guests a modal concept screen
-> followed by a study-language picker (`#welcomeOverlay`) that intercepts pointer events. The
-> page objects seed a study language before navigating so it stays closed; the
-> `tests/onboarding/welcome_language_picker.spec.ts` spec is the one place that
-> exercises the picker itself. See `page_objects/first-run.ts`.
+> **First-run overlays.** Two modals stand between a fresh browser and the app, and both
+> intercept pointer events. The first is the concept screen plus study-language picker
+> (`#welcomeOverlay`) shown to brand-new guests. The second is the one-off note each tab
+> shows the first time it is opened. The page objects seed both bits of localStorage before
+> navigating so neither opens; `suppressTabIntros` is exported separately for the specs that
+> drive the first run on purpose. `tests/onboarding/welcome_language_picker.spec.ts` is the
+> one place that exercises the picker itself. See `page_objects/first-run.ts`.
 
 ## Getting started
 

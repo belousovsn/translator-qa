@@ -1,10 +1,17 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import { suppressFirstRunWelcome, suppressTabIntros } from './first-run.js'
 
+/**
+ * The Decks page (the nav tab reads "Decks" since #392).
+ *
+ * It used to be the Library, split into a Topics/Decks tab pair. Topic packs
+ * moved to the Translator's Packs sheet, so this page is decks only and there
+ * are no tabs left to click.
+ */
 export class LibraryPage {
     readonly page: Page
     readonly navLink: Locator
-    readonly decksTab: Locator
+    readonly decksGrid: Locator
     readonly ankiImportButton: Locator
     readonly modal: Locator
     readonly fileInput: Locator
@@ -13,7 +20,7 @@ export class LibraryPage {
     constructor(page: Page) {
         this.page = page
         this.navLink = page.locator('#libraryNavLink')
-        this.decksTab = page.locator('[data-library-tab="decks"]')
+        this.decksGrid = page.locator('#libraryDecksGrid')
         this.ankiImportButton = page.locator('#ankiImportOpen')
         this.modal = page.locator('#ankiImportModal')
         this.fileInput = page.locator('#ankiImportFile')
@@ -25,7 +32,6 @@ export class LibraryPage {
         await suppressTabIntros(this.page)
         await this.page.goto('index.html', { waitUntil: 'networkidle' })
         await this.navLink.click()
-        await this.decksTab.click()
         await expect(this.ankiImportButton).toBeVisible()
     }
 
