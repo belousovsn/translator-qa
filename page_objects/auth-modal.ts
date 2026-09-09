@@ -1,7 +1,14 @@
 import {type Page, type Locator, expect} from '@playwright/test'
 
-/** Budget for a live Supabase email/password sign-in to land in the UI. */
-const AUTH_ROUND_TRIP_TIMEOUT_MS = 15_000
+/**
+ * Budget for a live Supabase email/password sign-in to land in the UI.
+ *
+ * Generous because it is one real round trip against a shared account: several
+ * specs sign the same user in while the run is under way, and the slow one waits
+ * with the Sign In button disabled. The app answers in well under a second — this
+ * is queueing, not product latency.
+ */
+const AUTH_ROUND_TRIP_TIMEOUT_MS = 30_000
 
 
 export class Auth {

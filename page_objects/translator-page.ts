@@ -30,8 +30,17 @@ export class TranslatorPage {
     readonly translitDisplay: Locator;
     readonly inputTranslitDisplay: Locator;
     readonly enrichmentPanel: Locator;
-    readonly synonymsList: Locator;
-    readonly examplesList: Locator;
+    readonly senseTabs: Locator;
+    readonly selectedSense: Locator;
+    readonly synonymChips: Locator;
+    readonly exampleItems: Locator;
+    readonly enrichmentGrammarChips: Locator;
+    readonly enrichmentSkeletonChips: Locator;
+    readonly enrichmentEmptyNote: Locator;
+    readonly packsOpenButton: Locator;
+    readonly packsModal: Locator;
+    readonly packsList: Locator;
+    readonly packsCloseButton: Locator;
     readonly suggestionsHint: Locator;
     readonly scribeOverlay: Locator;
     readonly nextWordButton: Locator;
@@ -69,8 +78,19 @@ constructor(page: Page) {
     this.translitDisplay = page.locator('#translitDisplay')
     this.inputTranslitDisplay = page.locator('#inputTranslitDisplay')
     this.enrichmentPanel = page.locator('#enrichmentPanel')
-    this.synonymsList = page.locator('#synonymsList')
-    this.examplesList = page.locator('#examplesList')
+    // One meaning per panel since #424: the tabs switch which meaning is shown,
+    // and synonyms, examples and grammar all belong to the selected one.
+    this.senseTabs = page.locator('#enrichmentSenses .enrichment-sense-tab')
+    this.selectedSense = page.locator('#enrichmentSenses .enrichment-sense')
+    this.synonymChips = page.locator('#enrichmentSenses .enrichment-block--synonyms .chip')
+    this.exampleItems = page.locator('#enrichmentSenses .examples-list .example-item')
+    this.enrichmentGrammarChips = page.locator('#enrichmentSenses .enrichment-grammar .chip')
+    this.enrichmentSkeletonChips = page.locator('#enrichmentSenses .chip--skeleton')
+    this.enrichmentEmptyNote = page.locator('#enrichmentSenses .enrichment-empty-note')
+    this.packsOpenButton = page.locator('#packsOpen')
+    this.packsModal = page.locator('#packsModal')
+    this.packsList = page.locator('#packsList')
+    this.packsCloseButton = page.locator('#packsModalClose')
     this.suggestionsHint = page.locator('#suggestionsHint')
     this.scribeOverlay = page.locator('#cardSaveScribe')
     this.nextWordButton = page.locator('#nextWordBtn')
@@ -122,6 +142,17 @@ async clickSubmitInput () {
 
 async clickNextWord () {
     await this.nextWordButton.click()
+}
+
+/** Switch the enrichment panel to another meaning of the same word. */
+async selectSense(label: string | RegExp) {
+    await this.senseTabs.filter({ hasText: label }).click()
+}
+
+/** Open the Packs sheet from the pump bar (Translator, #392). */
+async openPacks() {
+    await this.packsOpenButton.click()
+    await expect(this.packsModal).not.toHaveClass(/hidden/)
 }
 
 async openSaveModal() {

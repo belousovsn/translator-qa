@@ -77,7 +77,7 @@ test('pump next translates words and implicit next records skip', async ({ page 
     await expect(translatorPage.translatedWord).toHaveText('շուն')
 })
 
-test('pump done state points learners to the library', async ({ page }) => {
+test('pump done state points learners to the packs sheet', async ({ page }) => {
     const translatorPage = new TranslatorPage(page)
 
     await mockLearningInitialize(page)
@@ -98,8 +98,10 @@ test('pump done state points learners to the library', async ({ page }) => {
     await expect(translatorPage.pumpBarDoneIcon).toBeVisible()
     await expect(translatorPage.nextWordButton).toContainText('Get more words')
 
+    // An empty queue is a packs question, so the CTA opens the sheet that answers
+    // it rather than sending the learner to the Decks page (#392).
     await translatorPage.clickNextWord()
-    await expect(page.locator('#libraryPage')).not.toHaveClass(/hidden/)
+    await expect(translatorPage.packsModal).not.toHaveClass(/hidden/)
 })
 
 test('pump progress shows durable unlocked topic progress across save and reload', async ({ page }) => {

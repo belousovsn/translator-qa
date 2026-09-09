@@ -121,9 +121,10 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
         await expect(translator.inputField).toHaveValue('dog')
 
         // Next Word both translates the lemma and counts as a learning session.
-        const state = await onboarding.readState()
-        expect(state?.milestones?.ranLearning).toBe(true)
-        expect(state?.milestones?.translated).toBe(true)
+        // The click marks `ranLearning` at once; `translated` waits for the
+        // translation it kicked off, which lands after the input is filled.
+        await expect.poll(async () => (await onboarding.readState())?.milestones?.ranLearning).toBe(true)
+        await expect.poll(async () => (await onboarding.readState())?.milestones?.translated).toBe(true)
     })
 
     test('opening a game fires playedGame', async ({ page }) => {
@@ -189,7 +190,7 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
             route.fulfill({ status: 400, body: JSON.stringify({ code: 'WORD_NOT_FOUND', error: 'blocked', suggestions: [] }) }),
         )
         await page.route('**/api/images**', route => route.fulfill({ status: 200, body: '[]' }))
-        // Topics may fail to load — harmless for this deck-focused test.
+        // Packs may fail to load — harmless for this deck-focused test.
         await page.route('**/api/library/packs**', route => route.fulfill({ status: 200, body: '[]' }))
         await page.route('**/api/library/starter-decks?**', route =>
             route.fulfill({
@@ -209,9 +210,9 @@ test.describe('Onboarding milestone hooks (authenticated)', () => {
         // The deck import uses window.confirm — auto-accept it.
         page.on('dialog', dialog => dialog.accept())
 
+        // The Decks page has no tabs since the topic packs moved out (#392).
         await page.locator('#libraryNavLink').click()
-        await page.locator('[data-library-tab="decks"]').click()
-        const importBtn = page.locator('[data-deck-import]').first()
+        const importBtn = page.locator('#libraryDecksGrid [data-deck-import]').first()
         await expect(importBtn).toBeVisible()
         await importBtn.click()
 

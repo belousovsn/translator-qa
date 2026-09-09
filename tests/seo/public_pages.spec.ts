@@ -138,8 +138,11 @@ test.describe('public SEO surface', () => {
             await expect(labels).toHaveText(Array(labelCount).fill(name))
         }
 
-        const appCta = page.getByRole('link', { name: 'Open this pack in MemDecks' })
-        await expect(appCta).toHaveAttribute('href', /view=library/)
+        // The deck CTA opens the Translator: topic packs left the Library when
+        // they moved behind the pump bar (#392), and a deck is added from the
+        // Decks page the app opens on its own.
+        const appCta = page.getByRole('link', { name: 'Start learning in MemDecks' })
+        await expect(appCta).toHaveAttribute('href', /view=translator/)
         await expect(appCta).not.toHaveAttribute('href', /study=/)
     })
 

@@ -30,11 +30,60 @@ export interface SynonymEntry {
     note?: string;
 }
 
+export type WordCommonness =
+    | "very_common"
+    | "common"
+    | "uncommon"
+    | "rare";
+
+export interface WordGrammar {
+    partOfSpeech: string;
+    gender?: "masculine" | "feminine" | "neuter" | "common";
+    article?: string;
+    number?: "singular" | "plural" | "uncountable" | "invariant";
+    aspect?: "perfective" | "imperfective" | "biaspectual";
+    notes?: string;
+}
+
+/** A target-language surface form that may show up in an example. */
+export interface WordFormDetail {
+    value: string;
+    /** Short English morphology label, e.g. "1st person singular". */
+    label?: string;
+}
+
+/**
+ * One meaning of a word. Synonyms, forms and examples belong to the meaning and
+ * are never shared across the lexeme — the invariant the app's relational
+ * lexical model exists to enforce (#424).
+ */
+export interface WordSenseEnrichment {
+    /** Stable key within the word, e.g. "ability"; "main" when there is one meaning. */
+    senseKey: string;
+    targetHeadword: string;
+    targetTransliteration?: string;
+    /** Two-to-five-word English meaning note; the label on the meaning's tab. */
+    briefGloss?: string;
+    targetGloss?: string;
+    sourceSynonyms?: string[];
+    commonness?: WordCommonness;
+    register?: SynonymRegister;
+    sourcePartOfSpeech?: string;
+    targetPartOfSpeech?: string;
+    primary?: boolean;
+    forms?: WordFormDetail[];
+    examples?: { source: string; translation: string; targetToken: string }[];
+    synonyms?: SynonymEntry[];
+    grammar?: WordGrammar;
+}
+
 export interface WordEnrichment {
-    synonyms?: string[];
-    synonymDetails?: SynonymEntry[];
-    forms?: string[];
-    examples?: { source: string; translation: string; targetToken?: string }[];
+    /** The word's meanings. The flat synonyms/examples lists are gone (#424). */
+    senses?: WordSenseEnrichment[];
+    reviewStatus?: "unreviewed" | "passed" | "needs_review" | "needs_repair";
+    reviewVersion?: string;
+    /** Grammar of the primary sense's target word, kept for cards and chips. */
+    grammar?: WordGrammar;
 }
 
 export interface TranslationVariant {
