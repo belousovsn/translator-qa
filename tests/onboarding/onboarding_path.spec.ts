@@ -38,8 +38,19 @@ const deckjongGame = {
     onboarding: { completion: 'result' },
 }
 
-/** A stub game page with separate terminal-result and non-terminal milestone signals. */
-function stubGameHtml(label: string, reportResult: boolean, reportMilestone = false, reportPractice = false): string {
+/**
+ * A stub game page with separate terminal-result and non-terminal milestone signals.
+ * `saveCards` makes it a lesson that keeps its words the way Phrase Builder does: it asks
+ * the host with `game:save-cards`, and reports its result only once the host has answered.
+ * Each launch names a new lesson, so two runs save two different sets.
+ */
+function stubGameHtml(
+    label: string,
+    reportResult: boolean,
+    reportMilestone = false,
+    reportPractice = false,
+    saveCards = false,
+): string {
     return `<!doctype html><meta charset="utf-8"><title>${label}</title>
 <body style="font:16px system-ui;padding:24px">
 <h1>${label}</h1>
@@ -81,6 +92,22 @@ function stubGameHtml(label: string, reportResult: boolean, reportMilestone = fa
              }, '*')
            })`
         : ''}
+  ${saveCards
+        ? `let saveSent = false
+           addEventListener('message', event => {
+             if (event.data?.type === 'translator:init' && !saveSent) {
+               saveSent = true
+               const run = Number(sessionStorage.getItem('stub-lesson-runs') || '0') + 1
+               sessionStorage.setItem('stub-lesson-runs', String(run))
+               parent.postMessage({ type: 'game:save-cards', lessonId: 'stub-lesson-' + run }, '*')
+             }
+             if (event.data?.type === 'translator:cards-saved') {
+               document.body.dataset.saved = String(event.data.saved?.length ?? 0)
+               parent.postMessage({ type: 'game:result', result: {
+                 lessonId: 'stub', wordsSaved: event.data.saved?.length ?? 0, wordsSkipped: 0 } }, '*')
+             }
+           })`
+        : ''}
 </script>`
 }
 
@@ -90,9 +117,18 @@ type PathMockOptions = {
     practiceReportsResult?: boolean
     practiceReportsMilestone?: boolean
     anonymousSignInFails?: boolean
+    /**
+     * The lesson saves its words through the host, and `/api/cards` answers with what has
+     * been saved so far rather than a fixed list. Returns the requests the host sent.
+     */
+    lessonSavesWords?: boolean
 }
 
-async function mockPathDependencies(page: Page, options: PathMockOptions = {}): Promise<void> {
+type LessonSaveRequest = { lessonId?: string; version?: number; targetLang?: string }
+
+async function mockPathDependencies(page: Page, options: PathMockOptions = {}): Promise<LessonSaveRequest[]> {
+    const saveRequests: LessonSaveRequest[] = []
+    const savedCards: Array<Record<string, unknown>> = []
     await page.route('**/auth/v1/signup', route => {
         if (options.anonymousSignInFails) {
             return route.fulfill({
@@ -146,10 +182,31 @@ async function mockPathDependencies(page: Page, options: PathMockOptions = {}): 
     await page.route('**/api/images**', route => route.fulfill({
         status: 200, contentType: 'application/json', body: '[]',
     }))
+    await page.route('**/api/lessons/save-words', async route => {
+        const request = route.request().postDataJSON() as LessonSaveRequest
+        saveRequests.push(request)
+        const saved = [1, 2, 3, 4, 5].map(n => `${request.lessonId}-w${n}`)
+        saved.forEach((id, index) => savedCards.push({
+            id,
+            source_lang: 'en',
+            target_lang: 'el',
+            source_word: `${request.lessonId} word ${index + 1}`,
+            target_word: `λέξη ${index + 1}`,
+            img_url_small: '',
+            img_url_large: '',
+            score: 0,
+            hp: 100,
+        }))
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ saved, skipped: [], failed: [] }),
+        })
+    })
     await page.route('**/api/cards', route => route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(['c1', 'c2', 'c3'].map((id, index) => ({
+        body: JSON.stringify(options.lessonSavesWords ? savedCards : ['c1', 'c2', 'c3'].map((id, index) => ({
             id,
             source_lang: 'en',
             target_lang: 'el',
@@ -196,7 +253,9 @@ async function mockPathDependencies(page: Page, options: PathMockOptions = {}): 
     await page.route(`**${LESSON_STUB_URL}`, route => route.fulfill({
         status: 200,
         contentType: 'text/html',
-        body: stubGameHtml('Phrase Builder (stub)', options.lessonReportsResult !== false),
+        body: options.lessonSavesWords
+            ? stubGameHtml('Phrase Builder (stub)', false, false, false, true)
+            : stubGameHtml('Phrase Builder (stub)', options.lessonReportsResult !== false),
     }))
     await page.route(`**${PRACTICE_STUB_URL}`, route => route.fulfill({
         status: 200,
@@ -222,6 +281,7 @@ async function mockPathDependencies(page: Page, options: PathMockOptions = {}): 
             }),
         })
     })
+    return saveRequests
 }
 
 async function chooseGreek(page: Page): Promise<void> {
@@ -360,6 +420,48 @@ test.describe('First-run game path', () => {
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
         await expect(path.locator('[data-path-step="lesson-2"]')).toBeVisible()
         await expect(path).toContainText('Those were your cards')
+    })
+
+    // Translator-app#315. The whole chain a lesson depends on: the game asks to save, the
+    // host calls the API, the collection reflects it. #306 lived here: the second lesson's
+    // words were saved, but the collection kept serving its cached first five.
+    test('keeps both lessons’ words, and the collection shows all of them without a reload', async ({ page }) => {
+        const saveRequests = await mockPathDependencies(page, { games: [lessonGame], lessonSavesWords: true })
+        await page.goto('index.html', { waitUntil: 'networkidle' })
+        await chooseGreek(page)
+        await startFirstLesson(page)
+
+        const lessonBody = () => page.locator('#gameOverlay iframe').contentFrame().locator('body')
+        await expect(lessonBody()).toHaveAttribute('data-saved', '5')
+        await playAndLeaveGame(page)
+
+        // The client's card cache now holds a list from before the second save: the app
+        // fills it at start, and a practice game between the lessons would too. That cache
+        // is what #306 kept serving. Reading through it here makes sure it is filled,
+        // whatever the app happens to prefetch.
+        await page.evaluate(async () => {
+            const cards = await import('/dist/services/cardService.js' as string)
+            await cards.getCardsFromDB()
+        })
+
+        const path = page.locator('#onboardingPathOverlay')
+        await expect(path.locator('[data-path-step="lesson-2"]')).toBeVisible()
+        await path.locator('[data-path-continue]').click()
+        await expect(lessonBody()).toHaveAttribute('data-saved', '5')
+        await playAndLeaveGame(page)
+
+        // Two separate saves, each for the learner's language, with nothing a game wrote
+        // in them but the lesson id.
+        expect(saveRequests.map(({ lessonId, targetLang }) => ({ lessonId, targetLang }))).toEqual([
+            { lessonId: 'stub-lesson-1', targetLang: 'el' },
+            { lessonId: 'stub-lesson-2', targetLang: 'el' },
+        ])
+
+        const finish = path.locator('[data-path-step="finish"]')
+        await expect(finish).toBeVisible()
+        await finish.locator('[data-path-finish]').click()
+        await page.locator('a[data-page="dictionary"]').first().click()
+        await expect(page.locator('#dictCount')).toHaveText('10')
     })
 
     test('does not advance when an onboarding game closes before its milestone', async ({ page }) => {
