@@ -2,6 +2,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test'
 import type { Card, Translation } from '../../src/types.js'
 import { getSupabase } from '../supabase-client.js'
 import { TEST_EMAIL, TEST_PASSWORD, ADMIN_API_KEY } from '../../src/config.js'
+import { signInWithPassword } from '../sign-in.js'
 
 const CANDIDATE_WORDS = ['dog', 'cat', 'bird', 'water', 'sun']
 
@@ -12,10 +13,7 @@ type CardRow = {
 
 async function signInTestUser() {
     const supabase = await getSupabase()
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-    })
+    const { data, error } = await signInWithPassword(supabase, TEST_EMAIL, TEST_PASSWORD)
     expect(error).toBeNull()
 
     const accessToken = data.session?.access_token

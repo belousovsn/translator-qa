@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import WebSocket from 'ws'
 import type { Card, Translation } from '../../src/types.js'
 import { TEST_EMAIL, TEST_PASSWORD } from '../../src/config.js'
+import { signInWithPassword } from '../sign-in.js'
 
 // Node < 22 has no global WebSocket (needed by @supabase/realtime-js).
 const realtimeTransport = WebSocket as unknown as typeof globalThis.WebSocket
@@ -34,10 +35,7 @@ function isolatedClient(): SupabaseClient {
 
 async function signInPermanent(): Promise<{ token: string; id: string }> {
     const client = isolatedClient()
-    const { data, error } = await client.auth.signInWithPassword({
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-    })
+    const { data, error } = await signInWithPassword(client, TEST_EMAIL, TEST_PASSWORD)
     expect(error).toBeNull()
     expect(data.session?.access_token).toBeTruthy()
     return { token: data.session?.access_token ?? '', id: data.user?.id ?? '' }
@@ -167,7 +165,7 @@ test.describe('POST /api/account/merge', () => {
             // Remove the moved card from the permanent account.
             if (cardId) {
                 const dest = isolatedClient()
-                await dest.auth.signInWithPassword({ email: TEST_EMAIL, password: TEST_PASSWORD })
+                await signInWithPassword(dest, TEST_EMAIL, TEST_PASSWORD)
                 await dest.from('Cards').delete().eq('id', cardId)
             }
             // If the merge didn't run, the guest (and its card) still exist — best-effort drop.
