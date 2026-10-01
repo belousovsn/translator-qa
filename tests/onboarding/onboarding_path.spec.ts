@@ -63,8 +63,15 @@ function stubGameHtml(
     }
   })
   ${reportResult
-        ? `setTimeout(() => parent.postMessage({ type: 'game:result',
-             result: { lessonId: 'stub', wordsSaved: 5, wordsSkipped: 0 } }, '*'), 150)`
+        // A real game cannot finish before translator:init brings its cards, and the
+        // host now mints a game token before sending it (Translator-app#509).
+        ? `let resultSent = false
+           addEventListener('message', event => {
+             if (resultSent || event.data?.type !== 'translator:init') return
+             resultSent = true
+             setTimeout(() => parent.postMessage({ type: 'game:result',
+               result: { lessonId: 'stub', wordsSaved: 5, wordsSkipped: 0 } }, '*'), 150)
+           })`
         : ''}
   ${reportMilestone
         ? `let milestoneSent = false
@@ -249,6 +256,13 @@ async function mockPathDependencies(page: Page, options: PathMockOptions = {}): 
             requires: { minCards: 3 },
             remediation: { pumpAvailable: false, starterDeck: null, lemmasInPackTotal: 0, lemmasUserHasInPack: 0 },
         }),
+    }))
+    // The host mints a game token before translator:init; unmocked, it reaches the real
+    // server with a fake session and holds init for a second.
+    await page.route('**/api/games/session-token', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ gameToken: 'test-game-token', expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() }),
     }))
     await page.route(`**${LESSON_STUB_URL}`, route => route.fulfill({
         status: 200,
