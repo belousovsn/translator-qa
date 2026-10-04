@@ -10,6 +10,19 @@ import {type Page, type Locator, expect} from '@playwright/test'
  */
 const AUTH_ROUND_TRIP_TIMEOUT_MS = 30_000
 
+/** How many times a sign-in that failed on the network is submitted again. */
+const MAX_TRANSIENT_RESUBMITS = 2
+
+/**
+ * The modal's error after a 502-504 or a dropped connection at Supabase auth. The app
+ * printed the raw error, `{}`, until Translator-app fixed the message; both are accepted so
+ * the suite works against either build. Anything else (a wrong password) is not retried.
+ */
+function isTransientSignInError (text: string): boolean {
+    const message = text.trim()
+    return message === '{}' || /could not reach the sign-in service/i.test(message)
+}
+
 
 export class Auth {
     readonly page : Page;
@@ -20,6 +33,7 @@ export class Auth {
     readonly passwordInput: Locator;
     readonly signInButton: Locator;
     readonly navUserEmailLabel: Locator;
+    readonly authError: Locator;
 
     constructor (page: Page) {
         this.page = page;
@@ -30,6 +44,7 @@ export class Auth {
         this.passwordInput = page.locator('#authPassword')
         this.signInButton = page.locator('#authSubmit')
         this.navUserEmailLabel = page.locator('#navUserEmail')
+        this.authError = page.locator('#authError')
     }
 
     async startAuth () {
@@ -52,8 +67,21 @@ export class Auth {
     // rest of the suite is route-mocked), so it gets a budget of its own. The
     // default 5s expect timeout made this the suite's only recurring flake:
     // `#navUserEmail` was still empty when a slow/throttled auth call came back.
+    // With the budget raised it still flaked four nights out of 21 in September.
+    // The traces were lost, but an API spec caught the likely cause on 12 Sep: a
+    // 502-504 from Supabase auth. In the UI that leaves an error in the modal while
+    // the test waits out the 30 s, so such an attempt is submitted again.
     async isUserSignedIn (email: string) {
-        await expect(this.navUserEmailLabel).toContainText(email, { timeout: AUTH_ROUND_TRIP_TIMEOUT_MS })
+        let resubmits = 0
+        await expect(async () => {
+            if (resubmits < MAX_TRANSIENT_RESUBMITS
+                && await this.authError.isVisible()
+                && isTransientSignInError(await this.authError.innerText())) {
+                resubmits++
+                await this.signInButton.click()
+            }
+            await expect(this.navUserEmailLabel).toContainText(email, { timeout: 2_000 })
+        }).toPass({ timeout: AUTH_ROUND_TRIP_TIMEOUT_MS })
     }
     async isAuthPageClosed () {
         await expect(this.authModal).not.toBeVisible({ timeout: AUTH_ROUND_TRIP_TIMEOUT_MS })
