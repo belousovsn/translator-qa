@@ -76,6 +76,8 @@ const publicRoutes = [
     '/decks/weather-vocabulary/',
     '/decks/work-vocabulary/',
     '/games/',
+    '/games/phrase-builder/',
+    '/games/alphabet-quest/',
     '/collection/',
     '/help.html',
     '/contact.html',
@@ -139,7 +141,7 @@ test.describe('public SEO surface', () => {
 
     test('acquisition pages do not overflow a mobile viewport', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 })
-        for (const route of ['/languages/', '/learn/english-armenian/', '/learn/english-japanese/', '/learn/armenian-alphabet/', '/decks/', '/decks/travel-vocabulary/', '/decks/daily-actions-vocabulary/', '/games/', '/collection/']) {
+        for (const route of ['/languages/', '/learn/english-armenian/', '/learn/english-japanese/', '/learn/armenian-alphabet/', '/decks/', '/decks/travel-vocabulary/', '/decks/daily-actions-vocabulary/', '/games/', '/games/phrase-builder/', '/games/alphabet-quest/', '/collection/']) {
             await page.goto(route, { waitUntil: 'domcontentloaded' })
             const dimensions = await page.evaluate(() => ({
                 viewport: document.documentElement.clientWidth,
@@ -194,6 +196,16 @@ test.describe('public SEO surface', () => {
             Array(await page.locator('[data-study-language]').count()).fill('Arabic'),
         )
         await appPage.close()
+    })
+
+    test('a game page sends its visitor straight into that game', async ({ page }) => {
+        for (const game of ['phrase-builder', 'alphabet-quest']) {
+            await page.goto('/games/' + game + '/', { waitUntil: 'domcontentloaded' })
+            const play = page.locator('.seo-hero__actions .seo-button').first()
+            await expect(play).toHaveAttribute('href', new RegExp('view=games&game=' + game + '(&|$)'))
+            // The page is shared by every study language, so its main button must not pick one.
+            await expect(play).not.toHaveAttribute('href', /study=/)
+        }
     })
 
     test('sitemap contains only canonical pages that return 200', async ({ request }) => {
