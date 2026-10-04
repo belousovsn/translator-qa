@@ -51,6 +51,8 @@ const publicRoutes = [
     '/learn/english-german/',
     '/learn/english-french/',
     '/learn/english-italian/',
+    '/learn/armenian-alphabet/',
+    '/learn/armenian-words/',
     '/decks/',
     '/decks/starter-vocabulary/',
     '/decks/greetings-vocabulary/',
@@ -137,7 +139,7 @@ test.describe('public SEO surface', () => {
 
     test('acquisition pages do not overflow a mobile viewport', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 })
-        for (const route of ['/languages/', '/learn/english-armenian/', '/learn/english-japanese/', '/decks/', '/decks/travel-vocabulary/', '/decks/daily-actions-vocabulary/', '/games/', '/collection/']) {
+        for (const route of ['/languages/', '/learn/english-armenian/', '/learn/english-japanese/', '/learn/armenian-alphabet/', '/decks/', '/decks/travel-vocabulary/', '/decks/daily-actions-vocabulary/', '/games/', '/collection/']) {
             await page.goto(route, { waitUntil: 'domcontentloaded' })
             const dimensions = await page.evaluate(() => ({
                 viewport: document.documentElement.clientWidth,
