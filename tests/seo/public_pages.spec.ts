@@ -43,12 +43,36 @@ const publicRoutes = [
     '/',
     '/languages/',
     '/learn/english-armenian/',
+    '/learn/english-greek/',
+    '/learn/english-russian/',
+    '/learn/english-japanese/',
+    '/learn/english-chinese/',
+    '/learn/english-spanish/',
+    '/learn/english-german/',
+    '/learn/english-french/',
+    '/learn/english-italian/',
     '/decks/',
     '/decks/starter-vocabulary/',
     '/decks/greetings-vocabulary/',
     '/decks/travel-vocabulary/',
     '/decks/food-vocabulary/',
     '/decks/family-vocabulary/',
+    '/decks/body-vocabulary/',
+    '/decks/city-vocabulary/',
+    '/decks/clothing-vocabulary/',
+    '/decks/colors-vocabulary/',
+    '/decks/daily-actions-vocabulary/',
+    '/decks/emotions-vocabulary/',
+    '/decks/home-vocabulary/',
+    '/decks/music-vocabulary/',
+    '/decks/nature-vocabulary/',
+    '/decks/numbers-vocabulary/',
+    '/decks/school-vocabulary/',
+    '/decks/sports-vocabulary/',
+    '/decks/time-vocabulary/',
+    '/decks/tools-vocabulary/',
+    '/decks/weather-vocabulary/',
+    '/decks/work-vocabulary/',
     '/games/',
     '/collection/',
     '/help.html',
@@ -113,7 +137,7 @@ test.describe('public SEO surface', () => {
 
     test('acquisition pages do not overflow a mobile viewport', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 })
-        for (const route of ['/languages/', '/learn/english-armenian/', '/decks/', '/decks/travel-vocabulary/', '/games/', '/collection/']) {
+        for (const route of ['/languages/', '/learn/english-armenian/', '/learn/english-japanese/', '/decks/', '/decks/travel-vocabulary/', '/decks/daily-actions-vocabulary/', '/games/', '/collection/']) {
             await page.goto(route, { waitUntil: 'domcontentloaded' })
             const dimensions = await page.evaluate(() => ({
                 viewport: document.documentElement.clientWidth,
