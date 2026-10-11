@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { suppressTabIntros } from '../../page_objects/first-run.js'
+import { chooseStudyLanguage } from '../../page_objects/welcome.js'
 
 /**
  * Phrase Builder lives in its own repo and is registered like any other game, so
@@ -95,11 +96,7 @@ test.describe('Phrase Builder as a registered game', () => {
         })
         await page.goto('index.html?join=test-invite-token', { waitUntil: 'networkidle' })
 
-        const welcome = page.locator('#welcomeOverlay')
-        await expect(welcome).toBeVisible()
-        await welcome.locator('#welcomeIntroContinue').click()
-        await welcome.locator('button[data-lang="el"]').click()
-        await welcome.locator('#welcomeStart').click()
+        await chooseStudyLanguage(page, 'el')
 
         await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)

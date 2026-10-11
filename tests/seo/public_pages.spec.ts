@@ -76,6 +76,8 @@ const publicRoutes = [
     '/decks/weather-vocabulary/',
     '/decks/work-vocabulary/',
     '/games/',
+    '/games/alphabet-quest/',
+    '/games/phrase-builder/',
     '/collection/',
     '/help.html',
     '/contact.html',

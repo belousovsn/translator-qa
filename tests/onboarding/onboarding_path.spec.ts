@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { suppressTabIntros } from '../../page_objects/first-run.js'
+import { chooseStudyLanguage } from '../../page_objects/welcome.js'
 
 /**
  * Every step of the path — lesson included — is a registered game in the iframe,
@@ -299,11 +300,7 @@ async function mockPathDependencies(page: Page, options: PathMockOptions = {}): 
 }
 
 async function chooseGreek(page: Page): Promise<void> {
-    const welcome = page.locator('#welcomeOverlay')
-    await expect(welcome).toBeVisible()
-    await welcome.locator('#welcomeIntroContinue').click()
-    await welcome.locator('button[data-lang="el"]').click()
-    await welcome.locator('#welcomeStart').click()
+    await chooseStudyLanguage(page, 'el')
 }
 
 async function startFirstLesson(page: Page): Promise<void> {
@@ -583,12 +580,8 @@ test.describe('First-run game path', () => {
     test('does not start for a language the lesson game does not cover', async ({ page }) => {
         await mockPathDependencies(page)
         await page.goto('index.html', { waitUntil: 'networkidle' })
-        const welcome = page.locator('#welcomeOverlay')
-        await expect(welcome).toBeVisible()
-        await welcome.locator('#welcomeIntroContinue').click()
         // Spanish is absent from the lesson game's `languages`.
-        await welcome.locator('button[data-lang="es"]').click()
-        await welcome.locator('#welcomeStart').click()
+        await chooseStudyLanguage(page, 'es')
 
         // No guided run — but the closing map answers "where do more words come
         // from?", which this learner needs as much as a Greek one.

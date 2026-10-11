@@ -161,6 +161,7 @@ test.describe('Translate English word', () => {
             )
             await translatorPage.goto()
             await translatorPage.translateInput('dog')
+            await translatorPage.enrichmentPanel.locator('.enrichment-more__summary').click()
 
             const filters = translatorPage.enrichmentPanel.locator('.sense-form-filter')
             await expect(filters).toHaveText([
