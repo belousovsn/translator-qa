@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { suppressTabIntros } from '../../page_objects/first-run.js'
+import { continueToStudyLanguages } from '../../page_objects/welcome.js'
 
 // First-run welcome (`#welcomeOverlay`). A brand-new guest — no `mainLang` in
 // localStorage and no study language on their profile — first sees the product
@@ -35,7 +36,7 @@ const tiles = '#welcomeLangGrid button[data-lang]'
 const start = '#welcomeStart'
 
 async function continueToLanguages(page: Page): Promise<void> {
-    await page.locator(introContinue).click()
+    await continueToStudyLanguages(page)
     await expect(page.locator(intro)).toBeHidden()
     await expect(page.locator(languageStep)).toBeVisible()
 }

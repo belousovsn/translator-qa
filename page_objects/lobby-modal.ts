@@ -76,6 +76,9 @@ export class LobbyPage {
      *  to land on the "Choose how to play." choices screen. */
     async openLobbyFor(gameName: string): Promise<void> {
         await this.gameTile(gameName).click()
+        const info = this.page.locator('#gameInfoModal')
+        await expect(this.overlay.or(info).first()).toBeVisible()
+        if (await info.isVisible()) await this.page.locator('#gameInfoPlay').click()
         await expect(this.overlay).toBeVisible()
         // Connecting… → (hello/auth) → Choose how to play.
         await expect(this.status).toHaveText('Choose how to play.', { timeout: 15000 })
