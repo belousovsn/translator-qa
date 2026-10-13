@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { LobbyPage } from '../../page_objects/lobby-modal.js'
 import { suppressTabIntros } from '../../page_objects/first-run.js'
+import { seedCards } from '../card-seed.js'
 
 // Live lobby behaviour, driven through the app's Games page. These talk to the
 // real lobby service (LOBBY_URL from /api/settings) over socket.io, so they
@@ -14,6 +15,8 @@ import { suppressTabIntros } from '../../page_objects/first-run.js'
 // Serial: all tests share the one disposable account, and the lobby keys
 // seats/queues by userId — parallel runs would see each other's rooms.
 const GAME = 'words-tetris'
+// games.json `soloMinCards` for Words Tetris.
+const SOLO_MIN_CARDS = 4
 
 // Keep boot quiet/deterministic: block the seed-word auto-translate.
 async function blockTranslate(page: Page): Promise<void> {
@@ -47,29 +50,36 @@ test.describe('Multiplayer lobby (Words Tetris)', () => {
         await expect(lobby.overlay).toHaveCount(0)
     })
 
-    test('solo play launches a real match and Back returns to the lobby choices', async ({ page }) => {
-        const lobby = new LobbyPage(page)
-        await blockTranslate(page)
-        await lobby.gotoGames()
-        await lobby.openLobbyFor(GAME)
+    test('solo play launches a real match and Back returns to the lobby choices', async ({ page, request }) => {
+        // A solo match plays the player's own cards only, so the lobby holds Play solo
+        // back until the account has soloMinCards (4) of them (Translator-app#630).
+        const removeCards = await seedCards(request, 'hy', SOLO_MIN_CARDS)
+        try {
+            const lobby = new LobbyPage(page)
+            await blockTranslate(page)
+            await lobby.gotoGames()
+            await lobby.openLobbyFor(GAME)
 
-        // Solo: the lobby mints a real match ticket and hands off to the game.
-        await lobby.soloButton.click()
-        await lobby.expectMatchLaunched(GAME)
+            // Solo: the lobby mints a real match ticket and hands off to the game.
+            await lobby.soloButton.click()
+            await lobby.expectMatchLaunched(GAME)
 
-        // Browser Back is the in-game exit. A solo match has nothing to resume,
-        // so it goes straight back to the lobby choices without a Resume banner.
-        await page.goBack()
-        await expect(lobby.gameOverlay).toHaveClass(/hidden/)
-        await expect(lobby.overlay).toBeVisible()
-        await expect(lobby.choices).toBeVisible()
-        await expect(lobby.resumeBanner).toBeHidden()
-        await expect(lobby.status).toHaveText('Choose how to play.')
+            // Browser Back is the in-game exit. A solo match has nothing to resume,
+            // so it goes straight back to the lobby choices without a Resume banner.
+            await page.goBack()
+            await expect(lobby.gameOverlay).toHaveClass(/hidden/)
+            await expect(lobby.overlay).toBeVisible()
+            await expect(lobby.choices).toBeVisible()
+            await expect(lobby.resumeBanner).toBeHidden()
+            await expect(lobby.status).toHaveText('Choose how to play.')
 
-        // Closing the lobby fully exits to the games grid.
-        await lobby.closeButton.click()
-        await expect(lobby.overlay).toHaveCount(0)
-        await expect(lobby.gamesGrid).toBeVisible()
+            // Closing the lobby fully exits to the games grid.
+            await lobby.closeButton.click()
+            await expect(lobby.overlay).toHaveCount(0)
+            await expect(lobby.gamesGrid).toBeVisible()
+        } finally {
+            await removeCards()
+        }
     })
 
     test('quick match searches for a second player and can be cancelled', async ({ page }) => {
