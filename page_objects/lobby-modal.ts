@@ -79,7 +79,9 @@ export class LobbyPage {
         const info = this.page.locator('#gameInfoModal')
         await expect(this.overlay.or(info).first()).toBeVisible()
         if (await info.isVisible()) await this.page.locator('#gameInfoPlay').click()
-        await expect(this.overlay).toBeVisible()
+        // The lobby opens only after the app has asked how many cards the player owns
+        // (Translator-app#630), and that request has a tail of several seconds.
+        await expect(this.overlay).toBeVisible({ timeout: 20000 })
         // Connecting… → (hello/auth) → Choose how to play.
         await expect(this.status).toHaveText('Choose how to play.', { timeout: 15000 })
         await expect(this.choices).toBeVisible()

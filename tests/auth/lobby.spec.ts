@@ -192,6 +192,11 @@ test.describe('Multiplayer lobby (Words Tetris)', () => {
             await expect(hostLobby.overlay).toHaveCount(0)
         } finally {
             await guestContext.close()
+            // A failure above leaves the host seated in the room. The lobby keeps that
+            // seat by userId, so every retry would open on the room, not the choices.
+            if (await hostLobby.roomPanel.isVisible().catch(() => false)) {
+                await hostLobby.leaveButton.click({ timeout: 5000 }).catch(() => {})
+            }
         }
     })
 })
