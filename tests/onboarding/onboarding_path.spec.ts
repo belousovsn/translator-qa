@@ -303,13 +303,17 @@ async function chooseGreek(page: Page): Promise<void> {
     await chooseStudyLanguage(page, 'el')
 }
 
+/**
+ * The first card asks how to start (Translator-app#654). "I'm starting from zero" is
+ * the whole answer for the lesson run: the lesson opens without a second card.
+ */
 async function startFirstLesson(page: Page): Promise<void> {
     const path = page.locator('#onboardingPathOverlay')
-    await expect(path.locator('[data-path-step="lesson-1"]')).toBeVisible()
-    await expect(path).toContainText('Let’s add your first words')
-    await expect(path).toContainText('saved to your collection')
-    await expect(path.locator('[data-path-continue]')).toHaveText('I’m ready')
-    await path.locator('[data-path-continue]').click()
+    await expect(path.locator('[data-path-step="choice"]')).toBeVisible()
+    await expect(path).toContainText('How do you want to start?')
+    await expect(path.locator('[data-path-choice="lesson"]')).toContainText('I’m starting from zero')
+    await expect(path.locator('[data-path-choice="deck"]')).toContainText('I already know some words')
+    await path.locator('[data-path-choice="lesson"]').click()
 }
 
 /** Wait for the game iframe, then leave it the way a player does. */
@@ -348,7 +352,7 @@ test.describe('First-run game path', () => {
         })
 
         await chooseGreek(page)
-        await expect(page.locator('[data-path-step="lesson-1"]')).toBeVisible()
+        await expect(page.locator('[data-path-step="choice"]')).toBeVisible()
         expect(await page.evaluate(() => sessionStorage.getItem('onboarding-uncovered-gap'))).toBeNull()
         await startFirstLesson(page)
 
@@ -399,7 +403,7 @@ test.describe('First-run game path', () => {
         await chooseGreek(page)
         await startFirstLesson(page)
 
-        // The first lesson starts only after the learner accepts its short handoff.
+        // The first lesson starts only after the learner picks it on the first card.
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(1)
         await expect(page.locator('#gameOverlay iframe')).toHaveAttribute('src', /__stub-lesson/)
         await expect(page.locator('#onboardingPathOverlay')).toBeHidden()
@@ -714,7 +718,8 @@ test.describe('First-run game path', () => {
 
         await page.reload({ waitUntil: 'networkidle' })
 
-        // The lesson must not reopen by itself — the user gets its handoff again.
+        // The lesson must not reopen by itself. The run already chose the lesson, so the
+        // user gets the lesson's own card, not the first-card choice again.
         await expect(page.locator('#gameOverlay iframe')).toHaveCount(0)
         const path = page.locator('#onboardingPathOverlay')
         // Resume waits on the settings fetch, which is a real round-trip when the
