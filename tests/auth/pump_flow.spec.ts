@@ -41,10 +41,15 @@ test('pump next translates words and implicit next records skip', async ({ page 
     await page.route('**/api/pump/status**', route => {
         route.fulfill({ status: 200, body: JSON.stringify(pumpStatus(0, 2)) })
     })
+    // Like the server, next reads the queue head and only skip (or save) moves it.
+    // The client may ask for next more than once while the page settles.
     await page.route('**/api/pump/next**', route => {
-        route.fulfill({ status: 200, body: JSON.stringify(pumpWords.shift() ?? { done: true, totalRemaining: 0 }) })
+        route.fulfill({ status: 200, body: JSON.stringify(pumpWords[0] ?? { done: true, totalRemaining: 0 }) })
     })
     await page.route('**/api/pump/skip', route => {
+        const { lemmaId } = route.request().postDataJSON() as { lemmaId: number }
+        const index = pumpWords.findIndex(word => word.lemmaId === lemmaId)
+        if (index >= 0) pumpWords.splice(index, 1)
         route.fulfill({ status: 200, body: JSON.stringify({ ok: true }) })
     })
     await page.route('**/api/translate', route => {
