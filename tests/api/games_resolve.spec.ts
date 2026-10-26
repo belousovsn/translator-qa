@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import WebSocket from 'ws'
 import type { Card, Language, Translation } from '../../src/types.js'
 import { TEST_EMAIL, TEST_PASSWORD } from '../../src/config.js'
+import { signInWithPassword } from '../sign-in.js'
 
 // Contract checks for POST /api/games/resolve — the endpoint that decides which
 // of the player's cards a game may use. The heart of it is the focused-learning
@@ -48,10 +49,7 @@ function isolatedClient(): SupabaseClient {
 }
 
 async function signIn(client: SupabaseClient): Promise<string> {
-    const { data, error } = await client.auth.signInWithPassword({
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-    })
+    const { data, error } = await signInWithPassword(client, TEST_EMAIL, TEST_PASSWORD)
     expect(error).toBeNull()
     const token = data.session?.access_token ?? ''
     expect(token).toBeTruthy()
