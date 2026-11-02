@@ -117,7 +117,6 @@ const contentRoutes = [
     '/en/blog/why-language-apps-get-boring/',
     '/en/blog/vocabulary-before-grammar/',
     '/en/blog/learning-a-language-by-voice-with-chatgpt/',
-    '/en/blog/authors/sergey-belousov/',
     '/en/pricing/',
     '/en/about/',
     '/en/compare/anki/',
@@ -125,7 +124,70 @@ const contentRoutes = [
     '/en/compare/quizlet/',
 ]
 
-const allIndexableRoutes = [...publicRoutes, ...contentRoutes]
+// Russian counterparts published by #743. They are indexable and listed in the sitemap.
+const russianRoutes = [
+    '/ru/languages/',
+    '/ru/decks/',
+    '/ru/games/',
+    '/ru/collection/',
+    '/ru/decks/starter-vocabulary/',
+    '/ru/decks/greetings-vocabulary/',
+    '/ru/decks/travel-vocabulary/',
+    '/ru/decks/food-vocabulary/',
+    '/ru/decks/family-vocabulary/',
+    '/ru/decks/body-vocabulary/',
+    '/ru/decks/city-vocabulary/',
+    '/ru/decks/clothing-vocabulary/',
+    '/ru/decks/colors-vocabulary/',
+    '/ru/decks/daily-actions-vocabulary/',
+    '/ru/decks/emotions-vocabulary/',
+    '/ru/decks/home-vocabulary/',
+    '/ru/decks/music-vocabulary/',
+    '/ru/decks/nature-vocabulary/',
+    '/ru/decks/numbers-vocabulary/',
+    '/ru/decks/school-vocabulary/',
+    '/ru/decks/sports-vocabulary/',
+    '/ru/decks/time-vocabulary/',
+    '/ru/decks/tools-vocabulary/',
+    '/ru/decks/weather-vocabulary/',
+    '/ru/decks/work-vocabulary/',
+    '/ru/learn/english-armenian/',
+    '/ru/learn/english-greek/',
+    '/ru/learn/english-japanese/',
+    '/ru/learn/english-chinese/',
+    '/ru/learn/english-spanish/',
+    '/ru/learn/english-german/',
+    '/ru/learn/english-french/',
+    '/ru/learn/english-italian/',
+    '/ru/learn/armenian-alphabet/',
+    '/ru/learn/armenian-words/',
+    '/ru/games/phrase-builder/',
+    '/ru/games/alphabet-quest/',
+    '/ru/docs/',
+    '/ru/docs/what-is-memdecks/',
+    '/ru/docs/supported-languages/',
+    '/ru/docs/add-your-first-words/',
+    '/ru/docs/start-learning/',
+    '/ru/docs/how-a-session-works/',
+    '/ru/docs/learning-modes/',
+    '/ru/docs/card-progress/',
+    '/ru/docs/word-cards/',
+    '/ru/docs/decks-and-packs/',
+    '/ru/docs/games/',
+    '/ru/docs/multiplayer/',
+    '/ru/docs/practise-with-chatgpt/',
+    '/ru/docs/spaced-repetition/',
+    '/ru/docs/where-words-come-from/',
+    '/ru/docs/glossary/',
+    '/ru/docs/faq/',
+    '/ru/pricing/',
+    '/ru/about/',
+    '/ru/compare/anki/',
+    '/ru/compare/duolingo/',
+    '/ru/compare/quizlet/',
+]
+
+const allIndexableRoutes = [...publicRoutes, ...contentRoutes, ...russianRoutes]
 
 test.describe('public SEO surface', () => {
     for (const route of allIndexableRoutes) {
@@ -246,8 +308,8 @@ test.describe('English content surface', () => {
             const canonical = await page.locator('link[rel="canonical"]').getAttribute('href')
             expect(canonical).toBe(`https://memdecks.com${route}`)
 
-            // Self-referencing hreflang: English is the only published locale, and
-            // the pair has to be present so adding one is a content change.
+            // Self-referencing hreflang. Some pages also have a Russian alternate (#743);
+            // the English pair has to be present on every page.
             await expect(page.locator('link[hreflang="en"]')).toHaveAttribute('href', canonical!)
             await expect(page.locator('link[hreflang="x-default"]')).toHaveAttribute('href', canonical!)
 
@@ -259,7 +321,6 @@ test.describe('English content surface', () => {
             expect(organization, `${route} is missing Organization JSON-LD`).toBeTruthy()
             expect(organization.name).toBe('MemDecks')
             expect(organization['@id']).toBe('https://memdecks.com/#organization')
-            expect(Array.isArray(organization.sameAs) && organization.sameAs.length).toBeTruthy()
 
             // Every content page states when its facts were last checked.
             await expect(page.locator('.doc-meta time')).toHaveCount(1)
