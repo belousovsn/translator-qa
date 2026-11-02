@@ -41,7 +41,17 @@ function row(id: string, source: string, target: string, sourceWord: string, tar
     }
 }
 
-const STUDY_SET_KEY = 'translator.gameStudySet:hy'
+// Since #725 the study set belongs to an account: translator.gameStudySet:<user id>:<lang>.
+// The user id is read from the Supabase session the auth setup stored.
+const STUDY_SET_KEY_PATTERN = /^translator\.gameStudySet:[^:]+:hy$/
+
+async function seedStudySet(page: Page, cardIds: string[]): Promise<void> {
+    await page.addInitScript((ids) => {
+        const sessionKey = Object.keys(localStorage).find((key) => key.startsWith('sb-') && key.endsWith('-auth-token'))
+        const userId = sessionKey ? JSON.parse(localStorage.getItem(sessionKey) ?? 'null')?.user?.id : null
+        localStorage.setItem(`translator.gameStudySet:${userId ?? 'anon'}:hy`, JSON.stringify({ mode: 'cards', cardIds: ids }))
+    }, cardIds)
+}
 
 async function mockAppBackend(page: Page): Promise<void> {
     // Keep the boot deterministic: no seed auto-translate, quiet pump.
@@ -139,20 +149,17 @@ test.describe('Focused learning (game study set)', () => {
         await expect(page.locator('[data-game-study-mode="cards"]')).toHaveClass(/is-active/)
         await expect(page.locator('#gameStudyEdit')).toHaveText('Edit cards')
 
-        const stored = await page.evaluate(
-            (key) => JSON.parse(window.localStorage.getItem(key) ?? 'null'),
-            STUDY_SET_KEY,
-        )
+        const stored = await page.evaluate((pattern) => {
+            const key = Object.keys(window.localStorage).find((entry) => new RegExp(pattern).test(entry))
+            return key ? JSON.parse(window.localStorage.getItem(key) ?? 'null') : null
+        }, STUDY_SET_KEY_PATTERN.source)
         expect(stored).toEqual({ mode: 'cards', cardIds: ['hy-apple', 'hy-bread'] })
     })
 
     test('launching a game sends the focused card ids to the resolver', async ({ page }) => {
         await mockAppBackend(page)
         await injectTestGame(page, 2)
-        await page.addInitScript(
-            (key) => localStorage.setItem(key, JSON.stringify({ mode: 'cards', cardIds: ['hy-apple', 'hy-bread'] })),
-            STUDY_SET_KEY,
-        )
+        await seedStudySet(page, ['hy-apple', 'hy-bread'])
 
         let resolveBody: Record<string, unknown> | null = null
         await page.route('**/api/games/resolve', route => {
@@ -185,10 +192,7 @@ test.describe('Focused learning (game study set)', () => {
         await mockAppBackend(page)
         await injectTestGame(page, 2)
         // A stale selection, e.g. cards deleted since (or saved for another language).
-        await page.addInitScript(
-            (key) => localStorage.setItem(key, JSON.stringify({ mode: 'cards', cardIds: ['gone-card'] })),
-            STUDY_SET_KEY,
-        )
+        await seedStudySet(page, ['gone-card'])
         await page.route('**/api/games/resolve', route =>
             route.fulfill({
                 status: 200,
@@ -213,10 +217,7 @@ test.describe('Focused learning (game study set)', () => {
     test('the shortfall dialog explains how many selected cards match', async ({ page }) => {
         await mockAppBackend(page)
         await injectTestGame(page, 10)
-        await page.addInitScript(
-            (key) => localStorage.setItem(key, JSON.stringify({ mode: 'cards', cardIds: ['hy-apple', 'el-dog'] })),
-            STUDY_SET_KEY,
-        )
+        await seedStudySet(page, ['hy-apple', 'el-dog'])
         // One of the two selected cards is Greek, so only one matches this
         // Armenian game — and it's still short of the 10-card requirement.
         await page.route('**/api/games/resolve', route =>
