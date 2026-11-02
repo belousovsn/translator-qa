@@ -73,7 +73,11 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      # Each suite writes its own report: sharing one directory let the authenticated run
+      # overwrite the safe run's report, so a safe-suite flake never left a trace behind.
       - name: Run safe suite (unauth + translation + onboarding + API)
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/safe
         run: npm run test:safe
 
       - name: Run authenticated suite
@@ -81,6 +85,8 @@ jobs:
         # (not the implicit success()) so a safe-suite failure doesn't silently skip
         # the entire authenticated suite.
         if: ${{ !cancelled() && env.TEST_EMAIL != '' && env.TEST_PASSWORD != '' }}
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/auth
         run: npm run test:auth
 
       - name: Upload Playwright report

@@ -5,16 +5,14 @@ import { requireTestCredentials } from '../src/config.js'
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { signInWithPassword } from './sign-in.js'
 
 teardown('Clean DB and auth session', async ({}, testInfo) => {
     testInfo.annotations.push({ type: 'info', description: 'Starting DB cleanup' });
      // Sign in first so supabase knows who the user is
     const { email, password } = requireTestCredentials()
     const supabase = await getSupabase()
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-    });
+    const { error: signInError } = await signInWithPassword(supabase, email, password)
     if (signInError) {
         console.error('Sign in failed:', signInError.message);
         return;

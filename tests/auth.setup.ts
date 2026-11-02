@@ -5,6 +5,7 @@ import { suppressFirstRunWelcome, suppressTabIntros } from '../page_objects/firs
 import { getSupabase } from './supabase-client.js'
 import { fileURLToPath } from 'url';
 import { requireTestCredentials } from '../src/config.js'
+import { signInWithPassword } from './sign-in.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(__filename)
@@ -27,7 +28,7 @@ const authFile = path.join(dirname, '../playwright/.auth/user.json');
  */
 async function normalizeStudyLanguage(email: string, password: string): Promise<void> {
     const supabase = await getSupabase()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await signInWithPassword(supabase, email, password)
     if (error) {
         console.warn('[auth-setup] normalisation sign-in failed:', error.message)
         return

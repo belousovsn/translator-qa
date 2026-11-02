@@ -2,6 +2,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test'
 import type { CardsTranslateResponse } from '../../src/types.js'
 import { getSupabase } from '../supabase-client.js'
 import { TEST_EMAIL, TEST_PASSWORD, ADMIN_API_KEY } from '../../src/config.js'
+import { signInWithPassword } from '../sign-in.js'
 
 // Contract checks for POST /api/cards/translate — the scoped-card-token batch
 // endpoint that backs the games SDK's `ctx.translate` (mp-runtime). The validation
@@ -10,10 +11,7 @@ import { TEST_EMAIL, TEST_PASSWORD, ADMIN_API_KEY } from '../../src/config.js'
 
 async function signInTestUser(): Promise<{ accessToken: string; userId: string }> {
     const supabase = await getSupabase()
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-    })
+    const { data, error } = await signInWithPassword(supabase, TEST_EMAIL, TEST_PASSWORD)
     expect(error).toBeNull()
     const accessToken = data.session?.access_token ?? ''
     expect(accessToken).toBeTruthy()
