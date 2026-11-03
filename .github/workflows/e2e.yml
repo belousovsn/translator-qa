@@ -23,7 +23,9 @@ concurrency:
 
 jobs:
   typecheck:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04 on 27.10.2026, where Playwright
+    # cannot install Chromium, and the nightly stayed red unnoticed for a week.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +43,7 @@ jobs:
     # The live suite needs the deployed env + secrets, so keep it off per-push runs.
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Job-level env so steps inherit it and the `if` below can read env.* — the
     # `secrets` context is not available in `if` conditions.
     env:
@@ -57,9 +59,11 @@ jobs:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - id: deps
+        run: npm ci
 
       - name: Verify TEST_BASE_URL is configured
+        id: env
         # Without a base URL every page.goto('/') builds an invalid URL and the
         # whole suite fails with cryptic "Cannot navigate to invalid URL" errors.
         # Fail fast with a readable message instead.
@@ -71,17 +75,39 @@ jobs:
           echo "TEST_BASE_URL=$TEST_BASE_URL"
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        id: install
+        # The log is kept so the failure alert can quote why the install broke.
+        shell: bash
+        run: mkdir -p ci-results && npx playwright install --with-deps chromium 2>&1 | tee ci-results/install.log
 
+      # Each suite also writes a JSON report of its own: the failure alert reads
+      # them to name the failed tests. One file per suite, because both runs
+      # share Playwright's output folders and the second would overwrite the first.
       - name: Run safe suite (unauth + translation + onboarding + API)
-        run: npm run test:safe
+        id: safe
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ci-results/safe.json
+        run: npm run test:safe -- --reporter=html,json
 
       - name: Run authenticated suite
+        id: auth
         # Only when the disposable account credentials are configured. `!cancelled()`
         # (not the implicit success()) so a safe-suite failure doesn't silently skip
         # the entire authenticated suite.
         if: ${{ !cancelled() && env.TEST_EMAIL != '' && env.TEST_PASSWORD != '' }}
-        run: npm run test:auth
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ci-results/auth.json
+        run: npm run test:auth -- --reporter=html,json
+
+      - name: Tell Sergey in Telegram what failed
+        if: ${{ failure() }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_EVENT: ${{ github.event_name }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: node ci/notify-failure.mjs
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
