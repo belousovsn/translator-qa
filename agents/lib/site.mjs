@@ -111,7 +111,8 @@ function renderRun(run, i) {
 }
 
 export function renderSite(dataDir, personas) {
-  const sections = personas
+  // Personas that can run come first; the ones waiting for accounts sink.
+  const sections = [...personas.filter(isRunnable), ...personas.filter((p) => !isRunnable(p))]
     .map((p) => {
       const runs = listRuns(dataDir, p.id).slice(0, KEEP_RUNS);
       const sub = `${esc(p.device)} · ${esc(p.locale)} · ${esc(p.colorScheme ?? 'light')}`;
@@ -125,7 +126,7 @@ export function renderSite(dataDir, personas) {
       const stat = !isRunnable(p) || !last
         ? ''
         : `<span class="badge s-${esc(last.meta.status)}">${esc(STATUS[last.meta.status] ?? last.meta.status)}</span><span class="muted">${esc(fmtDate(last.meta.startedAt))}${shown != null ? ` · находок ${shown}` : ''}</span>`;
-      return `<details class="persona" data-id="${esc(p.id)}"><summary><span class="p-head"><h2>${esc(p.name)}</h2>${stat}</span><span class="muted">${sub}</span></summary>${body}</details>`;
+      return `<details class="persona" data-id="${esc(p.id)}"><summary><span class="p-body"><span class="p-head"><h2>${esc(p.name)}</h2>${stat}</span><span class="muted">${sub}</span></span></summary>${body}</details>`;
     })
     .join('');
   const html = `<!doctype html>
@@ -140,11 +141,12 @@ main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
 h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:18px; margin:0; } h4 { margin:14px 0 6px; font-size:14px; }
 .muted { color:var(--muted); font-size:13px; }
 .persona { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-top:12px; }
-.persona > summary { margin:0; display:flex; flex-direction:column; gap:2px; }
+.persona > summary { margin:0; display:flex; gap:6px; align-items:baseline; }
+.p-body { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .p-head { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; }
 summary { list-style:none; } summary::-webkit-details-marker { display:none; }
-.persona > summary .p-head::before, .run > summary .run-head::before { content:'▸'; color:var(--muted); display:inline-block; width:1em; transition:transform .15s; }
-.persona[open] > summary .p-head::before, .run[open] > summary .run-head::before { transform:rotate(90deg); }
+.persona > summary::before, .run > summary .run-head::before { content:'▸'; color:var(--muted); display:inline-block; flex:none; width:1em; transition:transform .15s; }
+.persona[open] > summary::before, .run[open] > summary .run-head::before { transform:rotate(90deg); }
 .toolbar { display:flex; gap:8px; margin-top:12px; }
 .toolbar button { font:inherit; font-size:13px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 10px; cursor:pointer; }
 .toolbar button:hover { border-color:var(--muted); }
