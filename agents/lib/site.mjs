@@ -54,6 +54,7 @@ function renderRun(run, i) {
   const head = `<div class="run-head">
     <strong>${esc(fmtDate(meta.startedAt))}</strong>
     <span class="badge s-${esc(meta.status)}">${esc(STATUS[meta.status] ?? meta.status)}</span>
+    ${meta.deploy ? `<span class="badge">после деплоя ${esc(meta.deploy.shas.map((x) => x.slice(0, 7)).join(', '))}</span>` : ''}
     <span class="muted">${minutes != null ? `${minutes} мин · ` : ''}${meta.numTurns ?? '?'} ходов · ${esc(meta.model)} · зерно ${meta.plan?.seed ?? '?'} · события: ${events}</span>
   </div>`;
   const links = `<div class="links">
@@ -99,6 +100,7 @@ function renderRun(run, i) {
   const known = (r.known ?? []).map((k) => `<li>${esc(k.accepted)} · шаг ${esc(k.step)}${k.note ? ` · ${esc(k.note)}` : ''}</li>`).join('');
   return `<details class="run"${open}>
     <summary>${head}</summary>
+    ${meta.deploy ? `<div class="deploy"><strong>Что поменялось:</strong> ${esc(meta.deploy.summary)}<ul>${(meta.deploy.focus ?? []).map((f) => `<li>${esc(f.area)}: ${esc(f.how)}</li>`).join('')}</ul></div>` : ''}
     <p>${esc(r.summary)}</p>
     ${goals ? `<h4>Цели</h4><ul class="goals">${goals}</ul>` : ''}
     ${verifyNote}
@@ -163,7 +165,7 @@ ul,ol { padding-left:20px; margin:4px 0; }
 .findings { list-style:none; padding-left:0; } .finding { border-left:3px solid var(--line); padding:6px 10px; margin:8px 0; }
 .sev-high { border-color:var(--bad); } .sev-medium { border-color:var(--mid); }
 .v-confirmed { color:var(--ok); } .v-reworded { color:var(--mid); } .v-rejected,.v-unverifiable { color:var(--muted); } .v-missed { color:var(--accent); }
-.where { font-size:14px; } .finding:target { background:var(--tag); }
+.deploy { font-size:14px; background:var(--tag); border-radius:6px; padding:6px 10px; margin-top:8px; } .where { font-size:14px; } .finding:target { background:var(--tag); }
 .finding img { display:block; max-width:100%; max-height:320px; margin-top:6px; border:1px solid var(--line); border-radius:6px; }
 .links { display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; } a { color:var(--accent); }
 details summary { cursor:pointer; margin-top:10px; }
