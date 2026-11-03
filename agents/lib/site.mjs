@@ -209,7 +209,7 @@ reveal();
 addEventListener('hashchange', reveal);
 
 // Manual runs and the runner's state, through the small API next to the page.
-const names = Object.fromEntries(personas.map((d) => [d.dataset.id, d.querySelector('h2').textContent]));
+const names = Object.fromEntries(personas.map((d) => [d.dataset.id, d.querySelector('h2').textContent.split(',')[0]]));
 const runnableIds = [...document.querySelectorAll('.run-btn')].map((b) => b.dataset.run);
 const STATE = { running: 'идёт по сайту', verifying: 'проверяющий смотрит отчёт', planning: 'планировщик читает дифф', probing: 'проверяем лимит подписки', waiting: 'ждём сброса лимита' };
 const time = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });

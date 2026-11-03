@@ -40,9 +40,9 @@ function status() {
   return {
     ...s,
     queue: [
-      ...readManual(QUEUE).map((j) => ({ kind: 'manual', personas: j.personas, at: j.at })),
-      ...readQueue(QUEUE).map((j) => ({ kind: 'deploy', sha: j.sha })),
-    ],
+      ...readManual(QUEUE).map((j) => ({ kind: 'manual', file: j.file, personas: j.personas, at: j.at })),
+      ...readQueue(QUEUE).map((j) => ({ kind: 'deploy', file: j.file, sha: j.sha })),
+    ].filter((j) => !(s.jobs ?? []).includes(j.file)),
   };
 }
 

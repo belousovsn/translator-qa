@@ -46,9 +46,11 @@ const log = (...m) => console.log(new Date().toISOString().slice(11, 19), ...m);
 // What the runner is doing now, for the page. The API checks `pid` is alive,
 // so a crash cannot leave the page saying "running" forever.
 const STATUS_FILE = () => path.join(DATA, 'status.json');
+// Queue files being worked on now; the page lists only the rest as waiting.
+let currentJobs = [];
 function setStatus(state, extra = {}) {
   try {
-    writeFileSync(STATUS_FILE(), JSON.stringify({ state, pid: process.pid, since: new Date().toISOString(), ...extra }));
+    writeFileSync(STATUS_FILE(), JSON.stringify({ state, pid: process.pid, since: new Date().toISOString(), jobs: currentJobs, ...extra }));
   } catch {}
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -221,6 +223,7 @@ async function runQueue(personas) {
     // Manual runs from the page go first: someone is waiting for them.
     const [manual] = readManual(queueDir);
     if (manual) {
+      currentJobs = [manual.file];
       const chosen = (manual.personas ?? []).map((id) => runnable.find((p) => p.id === id)).filter(Boolean);
       log(`manual: ${chosen.map((p) => p.id).join(', ') || 'nothing runnable'}`);
       if (chosen.length) {
@@ -239,6 +242,7 @@ async function runQueue(personas) {
         }
       }
       dropJobs(queueDir, [manual]);
+      currentJobs = [];
       setStatus('idle');
       continue;
     }
@@ -247,6 +251,7 @@ async function runQueue(personas) {
       setStatus('idle');
       return;
     }
+    currentJobs = jobs.map((j) => j.file);
     setStatus('planning', { shas: jobs.map((j) => j.sha) });
     const { shas, text } = combineJobs(jobs);
     log(`queue: ${shas.join(', ')}`);
@@ -257,17 +262,20 @@ async function runQueue(personas) {
       if (!flag('no-notify')) await sendTelegram(`QA-агенты ${head}: планировщик не ответил, прогон пропущен.
 ${plan.error.slice(0, 200)}`);
       dropJobs(queueDir, jobs);
+      currentJobs = [];
       continue;
     }
     if (!plan.ui) {
       log(`no visible change: ${plan.summary ?? ''}`);
       dropJobs(queueDir, jobs);
+      currentJobs = [];
       continue;
     }
     const decision = await waitForLimit();
     if (decision.action === 'skip') {
       if (!flag('no-notify')) await sendTelegram(`QA-агенты ${head}: прогон пропущен, ${decision.reason}`);
       dropJobs(queueDir, jobs);
+      currentJobs = [];
       continue;
     }
     const deploy = { ...plan, shas };
@@ -279,6 +287,7 @@ ${plan.error.slice(0, 200)}`);
       renderSite(DATA, personas);
     }
     dropJobs(queueDir, jobs);
+    currentJobs = [];
     setStatus('idle');
     if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision, deploy: { head, summary: plan.summary } }));
   }
