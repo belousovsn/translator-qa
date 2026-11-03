@@ -3,7 +3,7 @@
 // fit it, and where they should go first. The personas keep their own goals;
 // the focus only says which part of the app to visit on the way.
 
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { MODELS, runClaude } from './claude.mjs';
 
@@ -108,4 +108,31 @@ ${plan.summary ?? ''}
 Сходи в эти места по ходу своих целей, лучше в первой половине прогона. Смотри и на соседние экраны: стыки ломаются чаще всего. Свою роль не бросай: заходи туда так, как зашёл бы этот человек.
 
 ${items}`;
+}
+
+/**
+ * Manual runs from the page: queue/manual-<time>.json with the persona ids.
+ * They share the queue with deploys so one worker and one lock serve both.
+ */
+export function enqueueManual(queueDir, personaIds) {
+  mkdirSync(queueDir, { recursive: true });
+  const name = `manual-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  writeFileSync(path.join(queueDir, `${name}.part`), JSON.stringify({ personas: personaIds, at: new Date().toISOString() }));
+  renameSync(path.join(queueDir, `${name}.part`), path.join(queueDir, name));
+  return name;
+}
+
+export function readManual(queueDir) {
+  if (!existsSync(queueDir)) return [];
+  return readdirSync(queueDir)
+    .filter((f) => /^manual-.*\.json$/.test(f))
+    .sort()
+    .flatMap((f) => {
+      try {
+        return [{ file: f, ...JSON.parse(readFileSync(path.join(queueDir, f), 'utf8')) }];
+      } catch {
+        rmSync(path.join(queueDir, f), { force: true });
+        return [];
+      }
+    });
 }

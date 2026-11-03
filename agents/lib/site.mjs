@@ -128,7 +128,7 @@ export function renderSite(dataDir, personas) {
       const stat = !isRunnable(p) || !last
         ? ''
         : `<span class="badge s-${esc(last.meta.status)}">${esc(STATUS[last.meta.status] ?? last.meta.status)}</span><span class="muted">${esc(fmtDate(last.meta.startedAt))}${shown != null ? ` · находок ${shown}` : ''}</span>`;
-      return `<details class="persona" data-id="${esc(p.id)}"><summary><span class="p-body"><span class="p-head"><h2>${esc(p.name)}</h2>${stat}</span><span class="muted">${sub}</span></span></summary>${body}</details>`;
+      return `<details class="persona" data-id="${esc(p.id)}"><summary><span class="p-body"><span class="p-head"><h2>${esc(p.name)}</h2>${stat}</span><span class="muted">${sub}</span></span>${isRunnable(p) ? `<button type="button" class="run-btn" data-run="${esc(p.id)}">Запустить</button>` : ''}</summary>${body}</details>`;
     })
     .join('');
   const html = `<!doctype html>
@@ -151,7 +151,12 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .persona[open] > summary::before, .run[open] > summary .run-head::before { transform:rotate(90deg); }
 .toolbar { display:flex; gap:8px; margin-top:12px; }
 .toolbar button { font:inherit; font-size:13px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 10px; cursor:pointer; }
-.toolbar button:hover { border-color:var(--muted); }
+.toolbar button:hover, .run-btn:hover { border-color:var(--muted); }
+.toolbar .primary { background:var(--text); color:var(--bg); border-color:var(--text); }
+.run-btn { margin-left:auto; flex:none; align-self:center; font:inherit; font-size:13px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 10px; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+.status { margin-top:12px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); font-size:14px; }
+.status.busy { border-color:var(--accent); }
 .run { border-top:1px solid var(--line); margin-top:12px; padding-top:10px; }
 .run > summary { margin:0; }
 .run-head { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; }
@@ -174,7 +179,8 @@ details:not(.persona):not(.run) > summary::before { content:'▸ '; color:var(--
 <body><main>
 <h1>QA-агенты</h1>
 <div class="muted">Последние ${KEEP_RUNS} прогона каждого персонажа. Обновлено ${esc(fmtDate(new Date().toISOString()))}.</div>
-<div class="toolbar"><button type="button" data-all="open">Развернуть всех</button><button type="button" data-all="close">Свернуть всех</button></div>
+<div class="status" id="status" hidden></div>
+<div class="toolbar"><button type="button" class="primary" data-run="all">Запустить всех гостей</button><button type="button" data-all="open">Развернуть всех</button><button type="button" data-all="close">Свернуть всех</button></div>
 ${sections}
 </main>
 <script>
@@ -201,6 +207,51 @@ function reveal() {
 }
 reveal();
 addEventListener('hashchange', reveal);
+
+// Manual runs and the runner's state, through the small API next to the page.
+const names = Object.fromEntries(personas.map((d) => [d.dataset.id, d.querySelector('h2').textContent]));
+const runnableIds = [...document.querySelectorAll('.run-btn')].map((b) => b.dataset.run);
+const STATE = { running: 'идёт по сайту', verifying: 'проверяющий смотрит отчёт', planning: 'планировщик читает дифф', probing: 'проверяем лимит подписки', waiting: 'ждём сброса лимита' };
+const time = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const box = document.getElementById('status');
+let wasBusy = false;
+async function refresh() {
+  let s;
+  try { s = await (await fetch('api/status', { cache: 'no-store' })).json(); } catch { box.hidden = true; return; }
+  const busy = s.state !== 'idle';
+  const parts = [];
+  if (busy) {
+    const who = s.persona ? (names[s.persona] || s.persona) + ': ' : '';
+    parts.push('Сейчас ' + who + (STATE[s.state] || s.state) + (s.since ? ' с ' + time(s.since) : '') + (s.until ? ', до ' + time(s.until) : ''));
+  }
+  const q = (s.queue || []).map((j) => j.kind === 'manual' ? 'ручной: ' + j.personas.map((id) => names[id] || id).join(', ') : 'деплой ' + j.sha.slice(0, 7));
+  if (q.length) parts.push('В очереди: ' + q.join('; '));
+  box.textContent = parts.join('. ') || 'Сейчас ничего не идёт.';
+  box.className = 'status' + (busy ? ' busy' : '');
+  box.hidden = false;
+  // A run that just finished has rewritten this page.
+  if (wasBusy && !busy && !q.length) location.reload();
+  wasBusy = busy || q.length > 0;
+}
+for (const b of document.querySelectorAll('[data-run]')) {
+  b.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ids = b.dataset.run === 'all' ? runnableIds : [b.dataset.run];
+    b.disabled = true;
+    try {
+      const r = await fetch('api/run', { method: 'POST', headers: { 'content-type': 'application/json', 'x-qa-agents': '1' }, body: JSON.stringify({ personas: ids }) });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      await refresh();
+    } catch (err) {
+      alert('Не получилось поставить запуск: ' + err.message);
+    } finally {
+      setTimeout(() => { b.disabled = false; }, 3000);
+    }
+  });
+}
+refresh();
+setInterval(refresh, 10000);
 </script>
 </body></html>`;
   writeFileSync(path.join(dataDir, 'index.html'), html);

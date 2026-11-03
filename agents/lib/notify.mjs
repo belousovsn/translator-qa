@@ -28,7 +28,7 @@ const ORDER = { high: 0, medium: 1, low: 2 };
 export function summarize(runs, { pageUrl, decision, deploy }) {
   const page = pageUrl?.replace(/\/?$/, '/');
   const lines = [`QA-агенты: ${runs.length} ${runs.length === 1 ? 'персонаж' : 'персонажа'}`];
-  if (deploy) lines.push(`${deploy.head}: ${deploy.summary ?? ''}`.trim());
+  if (deploy) lines.push(deploy.summary ? `${deploy.head}: ${deploy.summary}` : deploy.head);
   if (decision?.waitedMin) lines.push(`ждали сброса лимита ${decision.waitedMin} мин`);
   for (const run of runs) {
     const r = run.report;
