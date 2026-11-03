@@ -20,3 +20,6 @@ node_modules/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# CI: per-suite JSON reports and the install log the failure alert reads
+/ci-results/
