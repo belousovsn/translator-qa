@@ -5,7 +5,7 @@
   "description": "QA personas that walk the test site as users and report what they see (#747). Separate from the Playwright suite so its browser build does not move the suite's.",
   "scripts": {
     "run": "node run.mjs",
-    "check": "node --check run.mjs && node test/events.test.mjs && node test/decide.test.mjs && node test/verify.test.mjs"
+    "check": "node --check run.mjs && node test/events.test.mjs && node test/decide.test.mjs && node test/verify.test.mjs && node test/planner.test.mjs"
   },
   "dependencies": {
     "@playwright/mcp": "0.0.83",

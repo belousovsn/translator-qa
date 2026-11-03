@@ -8,6 +8,7 @@
 //   node agents/run.mjs guest-ru-phone     one persona
 //   options: --seed=N  --max-actions=N  --no-probe  --no-notify  --no-verify
 //   node agents/run.mjs --reverify guest-ru-phone   verify the latest run again
+//   node agents/run.mjs --from-queue    diff mode: deploys queued by enqueue.sh
 //
 // Env: TEST_BASE_URL, QA_AGENTS_HOME (data folder), QA_AGENTS_PAGE_URL,
 // CLAUDE_BIN, CLAUDE_CODE_OAUTH_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
@@ -25,6 +26,7 @@ import { isRunnable, loadPersonas } from './lib/personas.mjs';
 import { buildPrompt, extractReport } from './lib/prompt.mjs';
 import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
 import { verifyRun } from './lib/verify.mjs';
+import { combineJobs, describeFocus, dropJobs, planDeploy, readQueue } from './lib/planner.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -73,7 +75,7 @@ async function waitForLimit() {
   }
 }
 
-async function runPersona(persona) {
+async function runPersona(persona, deploy = null) {
   const startedAt = new Date().toISOString();
   const runDir = path.join(DATA, 'runs', persona.id, startedAt.replace(/[:.]/g, '-'));
   mkdirSync(runDir, { recursive: true });
@@ -86,6 +88,7 @@ async function runPersona(persona) {
     accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8'),
     plan,
     maxActions: MAX_ACTIONS,
+    focus: deploy ? describeFocus(deploy) : '',
   });
   writeFileSync(path.join(runDir, 'prompt.md'), prompt);
   const mcpConfig = writeMcpConfig(runDir, persona);
@@ -135,6 +138,7 @@ async function runPersona(persona) {
     error: report ? null : (r.text || r.stderr).slice(0, 400),
     rateLimits: r.rateLimits,
     sessionLog: sessionDir ? `out/${sessionDir}/session.md` : null,
+    deploy: deploy ? { shas: deploy.shas, summary: deploy.summary, focus: deploy.focus } : null,
   };
   writeFileSync(path.join(runDir, 'meta.json'), JSON.stringify(meta, null, 2));
   if (report) writeFileSync(path.join(runDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -169,6 +173,7 @@ async function main() {
     if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL }));
     return;
   }
+  if (flag('from-queue')) return runQueue(personas);
   const blocked = chosen.filter((p) => !isRunnable(p));
   if (blocked.length) throw new Error(`waiting for test accounts: ${blocked.map((p) => p.id).join(', ')}`);
 
@@ -189,6 +194,52 @@ async function main() {
   }
   renderSite(DATA, personas);
   if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision }));
+}
+
+/**
+ * Diff mode. Takes every queued deploy, asks the planner whether a user can
+ * see the change and who should look, runs those personas with a focus, and
+ * repeats while deploys keep arriving.
+ */
+async function runQueue(personas) {
+  const queueDir = process.env.QA_AGENTS_QUEUE ?? path.join(DATA, '..', 'queue');
+  const runnable = personas.filter(isRunnable);
+  for (;;) {
+    const jobs = readQueue(queueDir);
+    if (!jobs.length) return;
+    const { shas, text } = combineJobs(jobs);
+    log(`queue: ${shas.join(', ')}`);
+    const plan = await planDeploy({ diff: text, personas: runnable, logFile: path.join(DATA, 'last-plan.jsonl') });
+    const head = `после деплоя ${shas.map((s) => s.slice(0, 7)).join(', ')}`;
+    if (plan.error) {
+      log('planner failed:', plan.error);
+      if (!flag('no-notify')) await sendTelegram(`QA-агенты ${head}: планировщик не ответил, прогон пропущен.
+${plan.error.slice(0, 200)}`);
+      dropJobs(queueDir, jobs);
+      continue;
+    }
+    if (!plan.ui) {
+      log(`no visible change: ${plan.summary ?? ''}`);
+      dropJobs(queueDir, jobs);
+      continue;
+    }
+    const decision = await waitForLimit();
+    if (decision.action === 'skip') {
+      if (!flag('no-notify')) await sendTelegram(`QA-агенты ${head}: прогон пропущен, ${decision.reason}`);
+      dropJobs(queueDir, jobs);
+      continue;
+    }
+    const deploy = { ...plan, shas };
+    const runs = [];
+    for (const id of plan.personas) {
+      const persona = runnable.find((p) => p.id === id);
+      runs.push(await runPersona(persona, deploy));
+      prune(persona.id);
+      renderSite(DATA, personas);
+    }
+    dropJobs(queueDir, jobs);
+    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision, deploy: { head, summary: plan.summary } }));
+  }
 }
 
 main().catch((e) => {

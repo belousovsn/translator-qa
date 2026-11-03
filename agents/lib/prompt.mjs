@@ -6,7 +6,7 @@ export const REPORT_END = 'REPORT>>>';
 // Builds the task for one persona run. The persona plays a user, performs the
 // planned environment events, judges what it sees by the shared rules, and ends
 // with one JSON report that the runner parses.
-export function buildPrompt({ persona, baseUrl, rules, accepted, plan, maxActions }) {
+export function buildPrompt({ persona, baseUrl, rules, accepted, plan, maxActions, focus = '' }) {
   return `Ты тестировщик, который играет роль пользователя приложения MemDecks на тестовом стенде ${baseUrl}. У тебя есть браузер через инструменты browser_*. Других инструментов нет и не нужно.
 
 # Твоя роль
@@ -20,7 +20,9 @@ ${persona.body}
 # События среды
 
 ${describePlan(plan)}
-
+${focus ? `
+${focus}
+` : ''}
 # Как судить
 
 Нарушение любого правила ниже записывается как находка со ссылкой на номер правила. Если увиденное совпадает с записью из списка принятых находок, записывай его в "known", а не в "findings".
