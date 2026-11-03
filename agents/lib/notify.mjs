@@ -15,9 +15,18 @@ export async function sendTelegram(text) {
   if (!res.ok) console.error(`Telegram answered ${res.status}: ${await res.text()}`);
 }
 
-const SEVERITY = { high: 'серьёзно', medium: 'средне', low: 'мелочь' };
+import { anchor } from './site.mjs';
+import { isShown, mergeFindings } from './verify.mjs';
 
+const SEVERITY = { high: 'серьёзно', medium: 'средне', low: 'мелочь' };
+const ORDER = { high: 0, medium: 1, low: 2 };
+
+/**
+ * One block per persona: goals, then only the findings that survived the
+ * verifier, worst first, each with where it happened and a link to it on the page.
+ */
 export function summarize(runs, { pageUrl, decision }) {
+  const page = pageUrl?.replace(/\/?$/, '/');
   const lines = [`QA-агенты: ${runs.length} ${runs.length === 1 ? 'персонаж' : 'персонажа'}`];
   if (decision?.waitedMin) lines.push(`ждали сброса лимита ${decision.waitedMin} мин`);
   for (const run of runs) {
@@ -28,13 +37,18 @@ export function summarize(runs, { pageUrl, decision }) {
     }
     const goals = r.goals ?? [];
     const reached = goals.filter((g) => g.reached).length;
-    const findings = r.findings ?? [];
-    lines.push('', `${run.persona.name}: шагов ${r.steps?.length ?? 0}, цели ${reached}/${goals.length}, находок ${findings.length}${r.known?.length ? `, известных ${r.known.length}` : ''}`);
-    for (const f of findings.slice(0, 5)) {
-      lines.push(`• ${f.id} [${SEVERITY[f.severity] ?? f.severity}] ${f.observed}`);
+    const all = mergeFindings(r, run.verify);
+    const shown = all.filter(isShown).sort((a, b) => (ORDER[a.severity] ?? 3) - (ORDER[b.severity] ?? 3));
+    const dropped = all.length - shown.length;
+    const check = run.verify?.error ? ', проверка не прошла' : !run.verify ? ', не проверено' : dropped ? `, отсеяно ${dropped}` : '';
+    lines.push('', `${run.persona.name}: цели ${reached}/${goals.length}, находок ${shown.length}${check}`);
+    for (const f of shown.slice(0, 6)) {
+      const where = f.where?.screen ? `${f.where.screen}: ` : '';
+      const link = page && run.rel ? `\n  ${page}#${anchor(run, f.id)}` : '';
+      lines.push(`• ${SEVERITY[f.severity] ?? f.severity} · ${where}${f.observed}${link}`);
     }
-    if (findings.length > 5) lines.push(`…и ещё ${findings.length - 5}`);
+    if (shown.length > 6) lines.push(`…и ещё ${shown.length - 6}`);
   }
-  if (pageUrl) lines.push('', pageUrl);
+  if (page) lines.push('', page);
   return lines.join('\n');
 }

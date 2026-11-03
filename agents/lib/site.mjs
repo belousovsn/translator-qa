@@ -1,8 +1,12 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { isRunnable } from './personas.mjs';
+import { isShown, mergeFindings, VERDICTS } from './verify.mjs';
 
 export const KEEP_RUNS = 2;
+
+/** Stable id of a finding on the page, used by links from Telegram. */
+export const anchor = (run, id) => `${run.rel.split('/').slice(1).join('-')}-${id}`;
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -28,6 +32,7 @@ export function listRuns(dataDir, personaId) {
       dir: path.join(dir, d),
       meta: readJson(path.join(dir, d, 'meta.json')),
       report: readJson(path.join(dir, d, 'report.json')),
+      verify: readJson(path.join(dir, d, 'verify.json')),
     }));
 }
 
@@ -67,25 +72,37 @@ function renderRun(run) {
         `<li class="${s.event ? 'event' : ''} ${s.ok === false ? 'bad' : ''}"><span class="n">${esc(s.n)}</span> ${s.event ? `<span class="tag">${esc(s.event)}</span> ` : ''}${esc(s.action)} <span class="arrow">→</span> ${esc(s.result)}</li>`,
     )
     .join('');
-  const findings = (r.findings ?? [])
-    .map((f) => {
-      // Agents name some shots finding-Fn.png; others keep the MCP's own name in out/.
-      const where = f.screenshot && ['', 'out'].find((sub) => existsSync(path.join(run.dir, sub, path.basename(f.screenshot))));
-      const shot = where != null ? `${run.rel}/${where ? `${where}/` : ''}${path.basename(f.screenshot)}` : null;
-      return `<li class="finding sev-${esc(f.severity)}">
-        <div><strong>${esc(f.id)}</strong> <span class="badge">${esc(SEVERITY[f.severity] ?? f.severity)}</span> ${esc(f.rule ?? '')} · шаг ${esc(f.step)}</div>
-        <div>Ожидал: ${esc(f.expected)}</div>
-        <div>Увидел: ${esc(f.observed)}</div>
-        ${shot ? `<a href="${esc(shot)}"><img src="${esc(shot)}" alt="${esc(f.id)}" loading="lazy"></a>` : ''}
-      </li>`;
-    })
-    .join('');
+  const all = mergeFindings(r, run.verify);
+  const renderFinding = (f) => {
+    // Agents name some shots finding-Fn.png; others keep the MCP's own name in out/.
+    const dir = f.screenshot && ['', 'out'].find((sub) => existsSync(path.join(run.dir, sub, path.basename(f.screenshot))));
+    const shot = dir != null ? `${run.rel}/${dir ? `${dir}/` : ''}${path.basename(f.screenshot)}` : null;
+    const w = f.where ?? {};
+    const place = [w.screen, w.element].filter(Boolean).join(' · ');
+    return `<li class="finding sev-${esc(f.severity)}" id="${esc(anchor(run, f.id))}">
+      <div><strong>${esc(f.id)}</strong> <span class="badge">${esc(SEVERITY[f.severity] ?? f.severity)}</span>${f.verdict ? ` <span class="badge v-${esc(f.verdict)}">${esc(f.verdict === 'missed' ? 'заметил проверяющий' : VERDICTS[f.verdict] ?? f.verdict)}</span>` : ''} ${esc(f.rule ?? '')}${f.step != null ? ` · шаг ${esc(f.step)}` : ''}</div>
+      ${place || w.url ? `<div class="where">Где: ${esc(place)}${w.url ? ` <a href="${esc(w.url)}" class="muted">${esc(w.url.replace(/^https?:\/\//, ''))}</a>` : ''}</div>` : ''}
+      ${f.expected ? `<div>Ожидал: ${esc(f.expected)}</div>` : ''}
+      <div>${f.verdict === 'missed' ? '' : 'Увидел: '}${esc(f.observed)}</div>
+      ${f.originalObserved ? `<div class="muted">Агент писал: ${esc(f.originalObserved)}</div>` : ''}
+      ${f.reason ? `<div class="muted">Проверка: ${esc(f.reason)}</div>` : ''}
+      ${shot ? `<a href="${esc(shot)}"><img src="${esc(shot)}" alt="${esc(f.id)}" loading="lazy"></a>` : ''}
+    </li>`;
+  };
+  const findings = all.filter(isShown).map(renderFinding).join('');
+  const dropped = all.filter((f) => !isShown(f));
+  const droppedHtml = dropped.length
+    ? `<details><summary>Отклонено и не проверить (${dropped.length})</summary><ul class="findings">${dropped.map(renderFinding).join('')}</ul></details>`
+    : '';
+  const verifyNote = run.verify?.error ? `<p class="bad">Проверка не прошла: ${esc(run.verify.error)}</p>` : !run.verify ? '<p class="muted">Находки не проверены.</p>' : '';
   const known = (r.known ?? []).map((k) => `<li>${esc(k.accepted)} · шаг ${esc(k.step)}${k.note ? ` · ${esc(k.note)}` : ''}</li>`).join('');
   return `<article class="run">
     ${head}
     <p>${esc(r.summary)}</p>
     ${goals ? `<h4>Цели</h4><ul class="goals">${goals}</ul>` : ''}
+    ${verifyNote}
     ${findings ? `<h4>Находки</h4><ul class="findings">${findings}</ul>` : '<p class="ok">Находок нет.</p>'}
+    ${droppedHtml}
     ${known ? `<details><summary>Известное (${r.known.length})</summary><ul>${known}</ul></details>` : ''}
     <details><summary>Ход прохождения (${r.steps?.length ?? 0})</summary><ol class="steps">${steps}</ol></details>
     ${links}
@@ -128,6 +145,8 @@ ul,ol { padding-left:20px; margin:4px 0; }
 .tag { font-size:12px; color:var(--accent); }
 .findings { list-style:none; padding-left:0; } .finding { border-left:3px solid var(--line); padding:6px 10px; margin:8px 0; }
 .sev-high { border-color:var(--bad); } .sev-medium { border-color:var(--mid); }
+.v-confirmed { color:var(--ok); } .v-reworded { color:var(--mid); } .v-rejected,.v-unverifiable { color:var(--muted); } .v-missed { color:var(--accent); }
+.where { font-size:14px; } .finding:target { background:var(--tag); }
 .finding img { display:block; max-width:100%; max-height:320px; margin-top:6px; border:1px solid var(--line); border-radius:6px; }
 .links { display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; } a { color:var(--accent); }
 details summary { cursor:pointer; margin-top:10px; }

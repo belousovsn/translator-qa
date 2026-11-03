@@ -6,7 +6,8 @@
 //
 //   node agents/run.mjs                    every runnable persona
 //   node agents/run.mjs guest-ru-phone     one persona
-//   options: --seed=N  --max-actions=N  --no-probe  --no-notify
+//   options: --seed=N  --max-actions=N  --no-probe  --no-notify  --no-verify
+//   node agents/run.mjs --reverify guest-ru-phone   verify the latest run again
 //
 // Env: TEST_BASE_URL, QA_AGENTS_HOME (data folder), QA_AGENTS_PAGE_URL,
 // CLAUDE_BIN, CLAUDE_CODE_OAUTH_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
@@ -23,6 +24,7 @@ import { sendTelegram, summarize } from './lib/notify.mjs';
 import { isRunnable, loadPersonas } from './lib/personas.mjs';
 import { buildPrompt, extractReport } from './lib/prompt.mjs';
 import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
+import { verifyRun } from './lib/verify.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -137,7 +139,13 @@ async function runPersona(persona) {
   writeFileSync(path.join(runDir, 'meta.json'), JSON.stringify(meta, null, 2));
   if (report) writeFileSync(path.join(runDir, 'report.json'), JSON.stringify(report, null, 2));
   log(`${persona.id}: ${status}, ${report?.findings?.length ?? 0} findings, ${Math.round(meta.durationMs / 60000)} min`);
-  return { persona, meta, report };
+
+  let verify = null;
+  if (report && !flag('no-verify')) {
+    verify = await verifyRun({ runDir, report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8') });
+    log(`${persona.id}: verified, ${verify.error ? `error: ${verify.error.slice(0, 120)}` : (verify.findings ?? []).map((v) => `${v.id} ${v.verdict}`).join(', ')}`);
+  }
+  return { persona, meta, report, verify, rel: path.relative(DATA, runDir).split(path.sep).join('/') };
 }
 
 async function main() {
@@ -147,6 +155,20 @@ async function main() {
   const chosen = ids.length ? personas.filter((p) => ids.includes(p.id)) : personas.filter(isRunnable);
   const unknown = ids.filter((id) => !personas.some((p) => p.id === id));
   if (unknown.length) throw new Error(`unknown persona: ${unknown.join(', ')}`);
+  if (flag('reverify')) {
+    // Re-check finished runs without walking the site again.
+    const runs = [];
+    for (const persona of chosen) {
+      const last = listRuns(DATA, persona.id)[0];
+      if (!last?.report) throw new Error(`${persona.id}: no finished run with a report`);
+      const verify = await verifyRun({ runDir: last.dir, report: last.report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8') });
+      log(`${persona.id}: verified ${last.rel}`);
+      runs.push({ persona, meta: last.meta, report: last.report, verify, rel: last.rel });
+    }
+    renderSite(DATA, personas);
+    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL }));
+    return;
+  }
   const blocked = chosen.filter((p) => !isRunnable(p));
   if (blocked.length) throw new Error(`waiting for test accounts: ${blocked.map((p) => p.id).join(', ')}`);
 

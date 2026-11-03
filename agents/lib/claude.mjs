@@ -4,6 +4,7 @@ import { createWriteStream } from 'node:fs';
 export const MODELS = {
   persona: process.env.QA_AGENTS_PERSONA_MODEL ?? 'claude-sonnet-5-5',
   probe: process.env.QA_AGENTS_PROBE_MODEL ?? 'claude-haiku-5-5',
+  verify: process.env.QA_AGENTS_VERIFY_MODEL ?? 'claude-opus-5-5',
 };
 
 const CLAUDE = process.env.CLAUDE_BIN ?? 'claude';
