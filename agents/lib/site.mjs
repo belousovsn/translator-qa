@@ -69,7 +69,9 @@ function renderRun(run) {
     .join('');
   const findings = (r.findings ?? [])
     .map((f) => {
-      const shot = f.screenshot && existsSync(path.join(run.dir, f.screenshot)) ? `${run.rel}/${f.screenshot}` : null;
+      // Agents name some shots finding-Fn.png; others keep the MCP's own name in out/.
+      const where = f.screenshot && ['', 'out'].find((sub) => existsSync(path.join(run.dir, sub, path.basename(f.screenshot))));
+      const shot = where != null ? `${run.rel}/${where ? `${where}/` : ''}${path.basename(f.screenshot)}` : null;
       return `<li class="finding sev-${esc(f.severity)}">
         <div><strong>${esc(f.id)}</strong> <span class="badge">${esc(SEVERITY[f.severity] ?? f.severity)}</span> ${esc(f.rule ?? '')} · шаг ${esc(f.step)}</div>
         <div>Ожидал: ${esc(f.expected)}</div>
