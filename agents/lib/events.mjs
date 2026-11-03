@@ -31,7 +31,7 @@ export const EVENTS = {
       'Вызови browser_run_code_unsafe с кодом:',
       '`async (page) => { await page.context().route("**/*", async (r) => { await new Promise((s) => setTimeout(s, 2500)); await r.continue(); }); return "slow"; }`',
       'Сделай три-четыре обычных действия на медленной сети, как сделал бы нетерпеливый человек.',
-      'Верни скорость: browser_run_code_unsafe с кодом `async (page) => { await page.context().unrouteAll({ behavior: "ignoreErrors" }); return "fast"; }`.',
+      'Верни скорость: browser_run_code_unsafe с кодом `async (page) => { await page.context().unroute("**/*"); return "fast"; }`.',
     ],
   },
   away: {
@@ -100,7 +100,23 @@ export function planEvents(seed) {
     events.push({ kind, afterStep });
   }
   events.sort((a, b) => a.afterStep - b.afterStep);
-  return { seed, events };
+  return { seed, events, games: planGames(seed) };
+}
+
+/**
+ * How this run treats games: a mock stand-in or the real ones, and which ways
+ * out of a game to try. Drawn from its own stream so the events above stay
+ * the same for a seed they already had.
+ */
+export function planGames(seed) {
+  const next = rng(seed ^ 0x9e3779b9);
+  const mode = next() < 0.6 ? 'mock' : 'real';
+  const exits = ['complete', 'early', 'reload'];
+  for (let i = exits.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(next() * (i + 1));
+    [exits[i], exits[j]] = [exits[j], exits[i]];
+  }
+  return { mode, exits: exits.slice(0, mode === 'mock' ? 3 : 2) };
 }
 
 export function describePlan(plan) {

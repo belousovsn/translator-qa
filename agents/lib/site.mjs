@@ -55,7 +55,7 @@ function renderRun(run, i) {
     <strong>${esc(fmtDate(meta.startedAt))}</strong>
     <span class="badge s-${esc(meta.status)}">${esc(STATUS[meta.status] ?? meta.status)}</span>
     ${meta.deploy ? `<span class="badge">после деплоя ${esc(meta.deploy.shas.map((x) => x.slice(0, 7)).join(', '))}</span>` : ''}
-    <span class="muted">${minutes != null ? `${minutes} мин · ` : ''}${meta.numTurns ?? '?'} ходов · ${esc(meta.model)} · зерно ${meta.plan?.seed ?? '?'} · события: ${events}</span>
+    <span class="muted">${minutes != null ? `${minutes} мин · ` : ''}${meta.numTurns ?? '?'} ходов · ${esc(meta.model)} · зерно ${meta.plan?.seed ?? '?'} · события: ${events}${meta.plan?.games ? ` · игры: ${meta.plan.games.mode === 'mock' ? 'мок' : 'настоящие'}, выходы ${esc(meta.plan.games.exits.join(', '))}` : ''}</span>
   </div>`;
   const links = `<div class="links">
     ${existsSync(path.join(run.dir, 'trace.zip')) ? `<a class="trace" data-trace="${esc(run.rel)}/trace.zip" href="#">Трейс</a>` : ''}

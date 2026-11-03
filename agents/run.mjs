@@ -26,6 +26,7 @@ import { isRunnable, loadPersonas } from './lib/personas.mjs';
 import { buildPrompt, extractReport } from './lib/prompt.mjs';
 import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
 import { verifyRun } from './lib/verify.mjs';
+import { writeMockFiles } from './lib/game-mock.mjs';
 import { combineJobs, describeFocus, dropJobs, planDeploy, readManual, readQueue } from './lib/planner.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -103,8 +104,9 @@ async function runPersona(persona, deploy = null) {
     focus: deploy ? describeFocus(deploy) : '',
   });
   writeFileSync(path.join(runDir, 'prompt.md'), prompt);
+  writeMockFiles(runDir, BASE_URL);
   const mcpConfig = writeMcpConfig(runDir, persona);
-  log(`${persona.id}: start, seed ${seed}, events ${plan.events.map((e) => e.kind).join(', ') || 'none'}`);
+  log(`${persona.id}: start, seed ${seed}, events ${plan.events.map((e) => e.kind).join(', ') || 'none'}, games ${plan.games.mode} ${plan.games.exits.join('/')}`);
   setStatus('running', { persona: persona.id, name: persona.name, mode: deploy ? 'deploy' : 'manual' });
 
   const r = await runClaude({

@@ -1,4 +1,5 @@
 import { describePlan } from './events.mjs';
+import { describeGames } from './game-mock.mjs';
 
 export const REPORT_START = '<<<REPORT';
 export const REPORT_END = 'REPORT>>>';
@@ -20,6 +21,8 @@ ${persona.body}
 # События среды
 
 ${describePlan(plan)}
+
+${plan.games ? describeGames(plan.games) : ''}
 ${focus ? `
 ${focus}
 ` : ''}
