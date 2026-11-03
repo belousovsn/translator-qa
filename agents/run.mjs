@@ -26,7 +26,9 @@ import { isRunnable, loadPersonas } from './lib/personas.mjs';
 import { buildPrompt, extractReport } from './lib/prompt.mjs';
 import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
 import { verifyRun } from './lib/verify.mjs';
-import { combineJobs, describeFocus, dropJobs, planDeploy, readQueue } from './lib/planner.mjs';
+import { writeMockFiles } from './lib/game-mock.mjs';
+import { describeKnowledge, loadKnowledge, refreshIssues } from './lib/knowledge.mjs';
+import { combineJobs, describeFocus, dropJobs, planDeploy, readManual, readQueue } from './lib/planner.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -42,6 +44,19 @@ const MAX_ACTIONS = Number(flagValue('max-actions') ?? 60);
 const RUN_TIMEOUT_MS = 50 * 60 * 1000;
 
 const log = (...m) => console.log(new Date().toISOString().slice(11, 19), ...m);
+
+// What the runner is doing now, for the page. The API checks `pid` is alive,
+// so a crash cannot leave the page saying "running" forever.
+const STATUS_FILE = () => path.join(DATA, 'status.json');
+// Queue files being worked on now; the page lists only the rest as waiting.
+let currentJobs = [];
+function setStatus(state, extra = {}) {
+  try {
+    writeFileSync(STATUS_FILE(), JSON.stringify({ state, pid: process.pid, since: new Date().toISOString(), jobs: currentJobs, ...extra }));
+  } catch {}
+}
+// The repo's accepted list plus what was decided on the page.
+const known = (opts) => [readFileSync(path.join(here, 'accepted.md'), 'utf8'), describeKnowledge(loadKnowledge(DATA), opts)].filter(Boolean).join('\n\n');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function installTraceViewer() {
@@ -67,6 +82,7 @@ async function waitForLimit() {
   for (;;) {
     const d = decide(await probeLimit());
     log('limit:', d.action, d.reason);
+    if (d.action === 'wait') setStatus('waiting', { reason: d.reason, until: new Date(d.until * 1000).toISOString() });
     if (d.action !== 'wait') return { ...d, waitedMin: Math.round((Date.now() - started) / 60000) };
     const ms = d.until * 1000 - Date.now();
     if (Date.now() - started + ms > 6 * 3600 * 1000) return { action: 'skip', reason: 'ждём дольше 6 часов' };
@@ -85,14 +101,16 @@ async function runPersona(persona, deploy = null) {
     persona,
     baseUrl: BASE_URL,
     rules: readFileSync(path.join(here, 'rules.md'), 'utf8'),
-    accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8'),
+    accepted: known(),
     plan,
     maxActions: MAX_ACTIONS,
     focus: deploy ? describeFocus(deploy) : '',
   });
   writeFileSync(path.join(runDir, 'prompt.md'), prompt);
+  writeMockFiles(runDir, BASE_URL);
   const mcpConfig = writeMcpConfig(runDir, persona);
-  log(`${persona.id}: start, seed ${seed}, events ${plan.events.map((e) => e.kind).join(', ') || 'none'}`);
+  log(`${persona.id}: start, seed ${seed}, events ${plan.events.map((e) => e.kind).join(', ') || 'none'}, games ${plan.games.mode} ${plan.games.exits.join('/')}`);
+  setStatus('running', { persona: persona.id, name: persona.name, mode: deploy ? 'deploy' : 'manual' });
 
   const r = await runClaude({
     prompt,
@@ -146,7 +164,8 @@ async function runPersona(persona, deploy = null) {
 
   let verify = null;
   if (report && !flag('no-verify')) {
-    verify = await verifyRun({ runDir, report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8') });
+    setStatus('verifying', { persona: persona.id, name: persona.name });
+    verify = await verifyRun({ runDir, report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: known({ forVerifier: true }) });
     log(`${persona.id}: verified, ${verify.error ? `error: ${verify.error.slice(0, 120)}` : (verify.findings ?? []).map((v) => `${v.id} ${v.verdict}`).join(', ')}`);
   }
   return { persona, meta, report, verify, rel: path.relative(DATA, runDir).split(path.sep).join('/') };
@@ -165,7 +184,7 @@ async function main() {
     for (const persona of chosen) {
       const last = listRuns(DATA, persona.id)[0];
       if (!last?.report) throw new Error(`${persona.id}: no finished run with a report`);
-      const verify = await verifyRun({ runDir: last.dir, report: last.report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8') });
+      const verify = await verifyRun({ runDir: last.dir, report: last.report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: known({ forVerifier: true }) });
       log(`${persona.id}: verified ${last.rel}`);
       runs.push({ persona, meta: last.meta, report: last.report, verify, rel: last.rel });
     }
@@ -173,6 +192,9 @@ async function main() {
     if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL }));
     return;
   }
+  // Closed issues become places to look at again.
+  const reopened = await refreshIssues(DATA).catch(() => 0);
+  if (reopened) log(`issues: ${reopened} changed state`);
   if (flag('from-queue')) return runQueue(personas);
   const blocked = chosen.filter((p) => !isRunnable(p));
   if (blocked.length) throw new Error(`waiting for test accounts: ${blocked.map((p) => p.id).join(', ')}`);
@@ -193,6 +215,7 @@ async function main() {
     renderSite(DATA, personas);
   }
   renderSite(DATA, personas);
+  setStatus('idle');
   if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision }));
 }
 
@@ -205,8 +228,39 @@ async function runQueue(personas) {
   const queueDir = process.env.QA_AGENTS_QUEUE ?? path.join(DATA, '..', 'queue');
   const runnable = personas.filter(isRunnable);
   for (;;) {
+    // Manual runs from the page go first: someone is waiting for them.
+    const [manual] = readManual(queueDir);
+    if (manual) {
+      currentJobs = [manual.file];
+      const chosen = (manual.personas ?? []).map((id) => runnable.find((p) => p.id === id)).filter(Boolean);
+      log(`manual: ${chosen.map((p) => p.id).join(', ') || 'nothing runnable'}`);
+      if (chosen.length) {
+        setStatus('probing');
+        const decision = await waitForLimit();
+        if (decision.action === 'skip') {
+          if (!flag('no-notify')) await sendTelegram(`QA-агенты, ручной запуск: пропущен, ${decision.reason}`);
+        } else {
+          const runs = [];
+          for (const persona of chosen) {
+            runs.push(await runPersona(persona));
+            prune(persona.id);
+            renderSite(DATA, personas);
+          }
+          if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision, deploy: { head: 'ручной запуск со страницы' } }));
+        }
+      }
+      dropJobs(queueDir, [manual]);
+      currentJobs = [];
+      setStatus('idle');
+      continue;
+    }
     const jobs = readQueue(queueDir);
-    if (!jobs.length) return;
+    if (!jobs.length) {
+      setStatus('idle');
+      return;
+    }
+    currentJobs = jobs.map((j) => j.file);
+    setStatus('planning', { shas: jobs.map((j) => j.sha) });
     const { shas, text } = combineJobs(jobs);
     log(`queue: ${shas.join(', ')}`);
     const plan = await planDeploy({ diff: text, personas: runnable, logFile: path.join(DATA, 'last-plan.jsonl') });
@@ -216,17 +270,20 @@ async function runQueue(personas) {
       if (!flag('no-notify')) await sendTelegram(`QA-агенты ${head}: планировщик не ответил, прогон пропущен.
 ${plan.error.slice(0, 200)}`);
       dropJobs(queueDir, jobs);
+      currentJobs = [];
       continue;
     }
     if (!plan.ui) {
       log(`no visible change: ${plan.summary ?? ''}`);
       dropJobs(queueDir, jobs);
+      currentJobs = [];
       continue;
     }
     const decision = await waitForLimit();
     if (decision.action === 'skip') {
       if (!flag('no-notify')) await sendTelegram(`QA-агенты ${head}: прогон пропущен, ${decision.reason}`);
       dropJobs(queueDir, jobs);
+      currentJobs = [];
       continue;
     }
     const deploy = { ...plan, shas };
@@ -238,6 +295,8 @@ ${plan.error.slice(0, 200)}`);
       renderSite(DATA, personas);
     }
     dropJobs(queueDir, jobs);
+    currentJobs = [];
+    setStatus('idle');
     if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision, deploy: { head, summary: plan.summary } }));
   }
 }
