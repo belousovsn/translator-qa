@@ -97,26 +97,42 @@ export async function probeLimit() {
 
 const HOUR = 3600;
 
+const asShare = (u) => (u == null ? null : u > 1 ? u / 100 : u);
+const pct = (s) => `${Math.round(s * 100)}%`;
+
 /**
- * Decides whether to start now. `utilization` may come as a 0–1 share or a
- * percent; both read the same here.
- *   run  — under half of the window used, or nothing reported
- *   wait — over half used or rejected, and the window resets within 6 hours
- *   skip — the reset is further away, which means the weekly limit
+ * Decides whether to start now. The subscription reports two windows in
+ * `unifiedWindows`: five_hour and seven_day, each with a 0–1 `utilization`
+ * and `resetsAt`. Older events carry only top-level `utilization`/`resetsAt`.
+ *   run  — under `threshold` of the 5-hour window used, or nothing reported
+ *   wait — over it or rejected, and the window resets within 6 hours
+ *   skip — the week is nearly spent, or the reset is days away
  */
-export function decide(probe, { threshold = 0.5, now = Date.now() / 1000 } = {}) {
+export function decide(probe, { threshold = 0.5, weekly = 0.9, now = Date.now() / 1000 } = {}) {
   const info = probe.info;
   if (!info) {
     return probe.ok
       ? { action: 'run', reason: 'лимит не сообщён, проба прошла' }
       : { action: 'skip', reason: `проба не прошла: ${probe.text.slice(0, 160)}` };
   }
-  const share = info.utilization == null ? null : info.utilization > 1 ? info.utilization / 100 : info.utilization;
-  const busy = info.status === 'rejected' || (share != null && share >= threshold);
-  if (!busy) return { action: 'run', reason: share == null ? `статус ${info.status}` : `занято ${Math.round(share * 100)}%`, info };
-  const resetIn = info.resetsAt ? info.resetsAt - now : null;
-  if (resetIn != null && resetIn <= 6 * HOUR) {
-    return { action: 'wait', until: info.resetsAt + 300, reason: share == null ? `статус ${info.status}` : `занято ${Math.round(share * 100)}%`, info };
+  const five = info.unifiedWindows?.five_hour ?? {};
+  const week = info.unifiedWindows?.seven_day ?? {};
+  const share = asShare(five.utilization ?? info.utilization);
+  const weekShare = asShare(week.utilization);
+  const resetsAt = five.resetsAt ?? info.resetsAt;
+  const reason = [
+    share == null ? `статус ${info.status}` : `5 ч занято ${pct(share)}`,
+    weekShare == null ? null : `неделя ${pct(weekShare)}`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  if (weekShare != null && weekShare >= weekly) {
+    return { action: 'skip', reason: `недельный лимит почти выбран, ${reason}`, info };
   }
-  return { action: 'skip', reason: 'лимит сбросится нескоро, похоже на недельный', info };
+  const busy = info.status === 'rejected' || (share != null && share >= threshold);
+  if (!busy) return { action: 'run', reason, info };
+  const resetIn = resetsAt ? resetsAt - now : null;
+  if (resetIn != null && resetIn <= 6 * HOUR) return { action: 'wait', until: resetsAt + 300, reason, info };
+  return { action: 'skip', reason: `лимит сбросится нескоро, похоже на недельный, ${reason}`, info };
 }
