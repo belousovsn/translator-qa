@@ -1,0 +1,14 @@
+{
+  "name": "translator-qa-agents",
+  "private": true,
+  "type": "module",
+  "description": "QA personas that walk the test site as users and report what they see (#747). Separate from the Playwright suite so its browser build does not move the suite's.",
+  "scripts": {
+    "run": "node run.mjs",
+    "check": "node --check run.mjs && node test/events.test.mjs && node test/decide.test.mjs"
+  },
+  "dependencies": {
+    "@playwright/mcp": "0.0.83",
+    "playwright": "1.64.0-alpha-1790635538000"
+  }
+}

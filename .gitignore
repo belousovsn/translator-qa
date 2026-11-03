@@ -23,3 +23,7 @@ node_modules/
 
 # CI: per-suite JSON reports and the install log the failure alert reads
 /ci-results/
+
+# QA agents: run data when started locally
+/agents/.data/
+/agents/node_modules/
