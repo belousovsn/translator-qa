@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { isRunnable } from './personas.mjs';
 import { isShown, mergeFindings, VERDICTS } from './verify.mjs';
+import { decisionFor, DECISIONS, loadKnowledge } from './knowledge.mjs';
 
 export const KEEP_RUNS = 2;
 
@@ -44,7 +45,7 @@ const fmtDate = (iso) => {
   return d.toLocaleString('ru-RU', { timeZone: 'Asia/Yerevan', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
 
-function renderRun(run, i) {
+function renderRun(run, i, k = { items: [] }) {
   const open = i === 0 ? ' open' : '';
   const { meta, report: r } = run;
   const minutes = meta.durationMs ? Math.round(meta.durationMs / 60000) : null;
@@ -75,6 +76,20 @@ function renderRun(run, i) {
     )
     .join('');
   const all = mergeFindings(r, run.verify);
+  const renderDecision = (f) => {
+    if (f.verdict === 'known') {
+      const item = k.items.find((x) => x.id === f.known);
+      return `<div class="decision">Известно: ${esc(f.known ?? '')}${item?.issue ? ` · <a href="${esc(item.issue.url)}">#${item.issue.number}</a>` : ''}</div>`;
+    }
+    const d = decisionFor(k, run.rel, f.id);
+    if (d) {
+      const what = d.kind === 'issue' && d.issue ? `в задаче <a href="${esc(d.issue.url)}">#${d.issue.number}</a>${d.issue.state === 'closed' ? ' (закрыта)' : ''}` : esc(DECISIONS[d.kind]);
+      return `<div class="decision">Решение: ${what} · ${esc(d.id)} <button type="button" class="link" data-undo="${esc(d.id)}">отменить</button></div>`;
+    }
+    if (!isShown(f)) return '';
+    const btn = (kind, label) => `<button type="button" data-decide="${kind}" data-run-rel="${esc(run.rel)}" data-finding="${esc(f.id)}">${label}</button>`;
+    return `<div class="decide">${btn('issue', 'В задачу')}${btn('accepted', 'Норма')}${btn('not-bug', 'Не баг')}</div>`;
+  };
   const renderFinding = (f) => {
     // Agents name some shots finding-Fn.png; others keep the MCP's own name in out/.
     const dir = f.screenshot && ['', 'out'].find((sub) => existsSync(path.join(run.dir, sub, path.basename(f.screenshot))));
@@ -89,6 +104,7 @@ function renderRun(run, i) {
       ${f.originalObserved ? `<div class="muted">Агент писал: ${esc(f.originalObserved)}</div>` : ''}
       ${f.reason ? `<div class="muted">Проверка: ${esc(f.reason)}</div>` : ''}
       ${shot ? `<a href="${esc(shot)}"><img src="${esc(shot)}" alt="${esc(f.id)}" loading="lazy"></a>` : ''}
+      ${renderDecision(f)}
     </li>`;
   };
   const findings = all.filter(isShown).map(renderFinding).join('');
@@ -112,7 +128,20 @@ function renderRun(run, i) {
   </details>`;
 }
 
+function renderKnowledge(k) {
+  if (!k.items.length) return '';
+  const rows = k.items
+    .map((i) => {
+      const where = [i.where?.screen, i.where?.element].filter(Boolean).join(' · ');
+      const what = i.kind === 'issue' && i.issue ? `<a href="${esc(i.issue.url)}">#${i.issue.number}</a>${i.issue.state === 'closed' ? ' закрыта' : ''}` : esc(DECISIONS[i.kind]);
+      return `<li><strong>${esc(i.id)}</strong> ${what} · ${where ? `${esc(where)}: ` : ''}${esc(i.observed)} <button type="button" class="link" data-undo="${esc(i.id)}">отменить</button></li>`;
+    })
+    .join('');
+  return `<details class="knowledge"><summary>Решения по находкам (${k.items.length})</summary><ul>${rows}</ul></details>`;
+}
+
 export function renderSite(dataDir, personas) {
+  const k = loadKnowledge(dataDir);
   // Personas that can run come first; the ones waiting for accounts sink.
   const sections = [...personas.filter(isRunnable), ...personas.filter((p) => !isRunnable(p))]
     .map((p) => {
@@ -121,7 +150,7 @@ export function renderSite(dataDir, personas) {
       const body = !isRunnable(p)
         ? '<p class="muted">Ждёт тестовых аккаунтов.</p>'
         : runs.length
-          ? runs.map(renderRun).join('')
+          ? runs.map((run, i) => renderRun(run, i, k)).join('')
           : '<p class="muted">Ещё не запускался.</p>';
       const last = runs[0];
       const shown = last?.report ? mergeFindings(last.report, last.verify).filter(isShown).length : null;
@@ -170,7 +199,10 @@ ul,ol { padding-left:20px; margin:4px 0; }
 .findings { list-style:none; padding-left:0; } .finding { border-left:3px solid var(--line); padding:6px 10px; margin:8px 0; }
 .sev-high { border-color:var(--bad); } .sev-medium { border-color:var(--mid); }
 .v-confirmed { color:var(--ok); } .v-reworded { color:var(--mid); } .v-rejected,.v-unverifiable { color:var(--muted); } .v-missed { color:var(--accent); }
-.deploy { font-size:14px; background:var(--tag); border-radius:6px; padding:6px 10px; margin-top:8px; } .where { font-size:14px; } .finding:target { background:var(--tag); }
+.deploy { font-size:14px; background:var(--tag); border-radius:6px; padding:6px 10px; margin-top:8px; } .where { font-size:14px; }
+.decide { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; } .decide button, .knowledge button { font:inherit; font-size:13px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:6px; padding:3px 10px; cursor:pointer; } .decide button:hover { border-color:var(--muted); }
+.decision { margin-top:8px; font-size:14px; color:var(--muted); } button.link { font:inherit; font-size:13px; background:none; border:none; padding:0; color:var(--accent); text-decoration:underline; cursor:pointer; }
+.knowledge { margin-top:12px; } .knowledge li { margin:4px 0; } .finding:target { background:var(--tag); }
 .finding img { display:block; max-width:100%; max-height:320px; margin-top:6px; border:1px solid var(--line); border-radius:6px; }
 .links { display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; } a { color:var(--accent); }
 details summary { cursor:pointer; margin-top:10px; }
@@ -180,6 +212,7 @@ details:not(.persona):not(.run) > summary::before { content:'▸ '; color:var(--
 <h1>QA-агенты</h1>
 <div class="muted">Последние ${KEEP_RUNS} прогона каждого персонажа. Обновлено ${esc(fmtDate(new Date().toISOString()))}.</div>
 <div class="status" id="status" hidden></div>
+${renderKnowledge(k)}
 <div class="toolbar"><button type="button" class="primary" data-run="all">Запустить всех гостей</button><button type="button" data-all="open">Развернуть всех</button><button type="button" data-all="close">Свернуть всех</button></div>
 ${sections}
 </main>
@@ -207,6 +240,33 @@ function reveal() {
 }
 reveal();
 addEventListener('hashchange', reveal);
+
+// Decisions on findings: file an issue, accept as normal, mark as not a bug, undo.
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-qa-agents': '1' }, body: JSON.stringify(body) });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out.error || r.status);
+  return out;
+}
+for (const b of document.querySelectorAll('[data-decide]')) {
+  b.addEventListener('click', async () => {
+    if (b.dataset.decide === 'issue' && !confirm('Завести задачу на GitHub по этой находке?')) return;
+    for (const x of b.parentElement.querySelectorAll('button')) x.disabled = true;
+    try {
+      await post('api/decide', { run: b.dataset.runRel, finding: b.dataset.finding, decision: b.dataset.decide });
+      location.reload();
+    } catch (err) {
+      alert('Не получилось: ' + err.message);
+      for (const x of b.parentElement.querySelectorAll('button')) x.disabled = false;
+    }
+  });
+}
+for (const b of document.querySelectorAll('[data-undo]')) {
+  b.addEventListener('click', async () => {
+    if (!confirm('Отменить решение ' + b.dataset.undo + '? Заведённая задача на GitHub останется.')) return;
+    try { await post('api/undo', { id: b.dataset.undo }); location.reload(); } catch (err) { alert('Не получилось: ' + err.message); }
+  });
+}
 
 // Manual runs and the runner's state, through the small API next to the page.
 const names = Object.fromEntries(personas.map((d) => [d.dataset.id, d.querySelector('h2').textContent.split(',')[0]]));

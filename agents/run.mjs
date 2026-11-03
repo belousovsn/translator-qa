@@ -27,6 +27,7 @@ import { buildPrompt, extractReport } from './lib/prompt.mjs';
 import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
 import { verifyRun } from './lib/verify.mjs';
 import { writeMockFiles } from './lib/game-mock.mjs';
+import { describeKnowledge, loadKnowledge, refreshIssues } from './lib/knowledge.mjs';
 import { combineJobs, describeFocus, dropJobs, planDeploy, readManual, readQueue } from './lib/planner.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,8 @@ function setStatus(state, extra = {}) {
     writeFileSync(STATUS_FILE(), JSON.stringify({ state, pid: process.pid, since: new Date().toISOString(), jobs: currentJobs, ...extra }));
   } catch {}
 }
+// The repo's accepted list plus what was decided on the page.
+const known = (opts) => [readFileSync(path.join(here, 'accepted.md'), 'utf8'), describeKnowledge(loadKnowledge(DATA), opts)].filter(Boolean).join('\n\n');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function installTraceViewer() {
@@ -98,7 +101,7 @@ async function runPersona(persona, deploy = null) {
     persona,
     baseUrl: BASE_URL,
     rules: readFileSync(path.join(here, 'rules.md'), 'utf8'),
-    accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8'),
+    accepted: known(),
     plan,
     maxActions: MAX_ACTIONS,
     focus: deploy ? describeFocus(deploy) : '',
@@ -162,7 +165,7 @@ async function runPersona(persona, deploy = null) {
   let verify = null;
   if (report && !flag('no-verify')) {
     setStatus('verifying', { persona: persona.id, name: persona.name });
-    verify = await verifyRun({ runDir, report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8') });
+    verify = await verifyRun({ runDir, report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: known({ forVerifier: true }) });
     log(`${persona.id}: verified, ${verify.error ? `error: ${verify.error.slice(0, 120)}` : (verify.findings ?? []).map((v) => `${v.id} ${v.verdict}`).join(', ')}`);
   }
   return { persona, meta, report, verify, rel: path.relative(DATA, runDir).split(path.sep).join('/') };
@@ -181,7 +184,7 @@ async function main() {
     for (const persona of chosen) {
       const last = listRuns(DATA, persona.id)[0];
       if (!last?.report) throw new Error(`${persona.id}: no finished run with a report`);
-      const verify = await verifyRun({ runDir: last.dir, report: last.report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: readFileSync(path.join(here, 'accepted.md'), 'utf8') });
+      const verify = await verifyRun({ runDir: last.dir, report: last.report, persona, rules: readFileSync(path.join(here, 'rules.md'), 'utf8'), accepted: known({ forVerifier: true }) });
       log(`${persona.id}: verified ${last.rel}`);
       runs.push({ persona, meta: last.meta, report: last.report, verify, rel: last.rel });
     }
@@ -189,6 +192,9 @@ async function main() {
     if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL }));
     return;
   }
+  // Closed issues become places to look at again.
+  const reopened = await refreshIssues(DATA).catch(() => 0);
+  if (reopened) log(`issues: ${reopened} changed state`);
   if (flag('from-queue')) return runQueue(personas);
   const blocked = chosen.filter((p) => !isRunnable(p));
   if (blocked.length) throw new Error(`waiting for test accounts: ${blocked.map((p) => p.id).join(', ')}`);
