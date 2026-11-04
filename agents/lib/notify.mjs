@@ -6,13 +6,31 @@ export async function sendTelegram(text) {
     console.log(`--- Telegram${token ? ' (dry run)' : ' (not configured)'} ---\n${text}\n---`);
     return;
   }
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
-  });
-  // The token is part of the URL, so only the status and Telegram's answer are printed.
-  if (!res.ok) console.error(`Telegram answered ${res.status}: ${await res.text()}`);
+  for (const part of splitMessage(text)) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: part, disable_web_page_preview: true }),
+    });
+    // The token is part of the URL, so only the status and Telegram's answer are printed.
+    if (!res.ok) console.error(`Telegram answered ${res.status}: ${await res.text()}`);
+  }
+}
+
+// Telegram takes at most 4096 characters per message, so a long summary goes in parts, cut at line ends.
+export function splitMessage(text, limit = 4000) {
+  const parts = [];
+  let cur = '';
+  for (const line of text.split('\n')) {
+    for (let l = line; ; l = l.slice(limit)) {
+      const piece = l.slice(0, limit);
+      if (cur && cur.length + 1 + piece.length > limit) parts.push(cur), (cur = '');
+      cur = cur ? `${cur}\n${piece}` : piece;
+      if (l.length <= limit) break;
+    }
+  }
+  if (cur) parts.push(cur);
+  return parts;
 }
 
 import { anchor } from './site.mjs';

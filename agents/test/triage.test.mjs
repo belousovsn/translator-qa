@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { addItem, describeKnowledge, loadKnowledge, saveKnowledge } from '../lib/knowledge.mjs';
 import { applyTriage, buildTriagePrompt, collectFindings, describeTriage, extractTriage, formatBoard, issueBody, MAX_NEW_ISSUES, scrub } from '../lib/triage.mjs';
+import { splitMessage } from '../lib/notify.mjs';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'qa-t-'));
 const persona = (id, name) => ({ id, name, device: 'Pixel 7', locale: 'ru-RU' });
@@ -107,4 +108,9 @@ assert.equal(capped.applied.filter((a) => a.action === 'skip').length, 2);
 
 assert.equal(scrub('пароль s3cret-pass и токен eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop', ['s3cret-pass']), 'пароль «скрыто» и токен «токен скрыт»');
 assert.match(issueBody({ decision: { reason: 'r' }, items: [items[1]] }), /\*\*Что не так:\*\* лимит на первом слове/);
+// Long Telegram summaries go in parts of at most 4000 characters.
+const long = Array.from({ length: 300 }, (_, i) => `строка ${i} ${'x'.repeat(30)}`).join('\n');
+assert.ok(splitMessage(long).length > 1);
+assert.ok(splitMessage(long).every((p) => p.length <= 4000));
+assert.equal(splitMessage(long).join('\n'), long);
 console.log('triage ok');
