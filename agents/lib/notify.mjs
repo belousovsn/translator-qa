@@ -16,6 +16,7 @@ export async function sendTelegram(text) {
 }
 
 import { anchor } from './site.mjs';
+import { describeTriage } from './triage.mjs';
 import { isShown, mergeFindings } from './verify.mjs';
 
 const SEVERITY = { high: 'серьёзно', medium: 'средне', low: 'мелочь' };
@@ -25,7 +26,7 @@ const ORDER = { high: 0, medium: 1, low: 2 };
  * One block per persona: goals, then only the findings that survived the
  * verifier, worst first, each with where it happened and a link to it on the page.
  */
-export function summarize(runs, { pageUrl, decision, deploy }) {
+export function summarize(runs, { pageUrl, decision, deploy, triage }) {
   const page = pageUrl?.replace(/\/?$/, '/');
   const lines = [`QA-агенты: ${runs.length} ${runs.length === 1 ? 'персонаж' : 'персонажа'}`];
   if (deploy) lines.push(deploy.summary ? `${deploy.head}: ${deploy.summary}` : deploy.head);
@@ -50,6 +51,7 @@ export function summarize(runs, { pageUrl, decision, deploy }) {
     }
     if (shown.length > 6) lines.push(`…и ещё ${shown.length - 6}`);
   }
+  lines.push(...describeTriage(triage));
   if (page) lines.push('', page);
   return lines.join('\n');
 }

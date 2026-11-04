@@ -8,6 +8,8 @@
 //   node agents/run.mjs guest-ru-phone     one persona
 //   options: --seed=N  --max-actions=N  --no-probe  --no-notify  --no-verify
 //   node agents/run.mjs --reverify guest-ru-phone   verify the latest run again
+//   node agents/run.mjs --retriage hy-veteran       triage the latest runs by the board
+//   options: --no-triage   verify, but file nothing
 //   node agents/run.mjs --from-queue    diff mode: deploys queued by enqueue.sh
 //
 // Env: TEST_BASE_URL, QA_AGENTS_HOME (data folder), QA_AGENTS_PAGE_URL,
@@ -27,7 +29,8 @@ import { buildPrompt, extractReport } from './lib/prompt.mjs';
 import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
 import { verifyRun } from './lib/verify.mjs';
 import { writeMockFiles } from './lib/game-mock.mjs';
-import { describeKnowledge, loadKnowledge, refreshIssues } from './lib/knowledge.mjs';
+import { describeKnowledge, github, loadKnowledge, refreshIssues } from './lib/knowledge.mjs';
+import { readSecretValues, triageBatch } from './lib/triage.mjs';
 import { combineJobs, describeFocus, dropJobs, planDeploy, readManual, readQueue } from './lib/planner.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +61,23 @@ function setStatus(state, extra = {}) {
 // The repo's accepted list plus what was decided on the page.
 const known = (opts) => [readFileSync(path.join(here, 'accepted.md'), 'utf8'), describeKnowledge(loadKnowledge(DATA), opts)].filter(Boolean).join('\n\n');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PAGE_URL = process.env.QA_AGENTS_PAGE_URL;
+
+/** The triage agent files what the batch found. Never fails the batch. */
+async function triage(runs) {
+  if (flag('no-triage') || flag('no-verify')) return null;
+  setStatus('triaging');
+  try {
+    const t = await triageBatch({ runs, gh: github(), dataDir: DATA, pageUrl: PAGE_URL, secrets: readSecretValues(SECRETS_FILE), log });
+    if (t.skipped) log(`triage: skipped, ${t.skipped}`);
+    else if (t.error) log(`triage: failed, ${t.error.slice(0, 160)}`);
+    else log(`triage: ${t.applied.map((a) => `${a.action}${a.issue ? ` #${a.issue.number}` : ''} ${a.findings.join('+')}`).join(', ') || 'nothing to decide'}`);
+    return t;
+  } catch (e) {
+    log(`triage: ${e.message}`);
+    return { error: e.message, applied: [], left: [] };
+  }
+}
 
 function installTraceViewer() {
   const target = path.join(DATA, 'trace-viewer');
@@ -178,6 +198,14 @@ async function main() {
   const chosen = ids.length ? personas.filter((p) => ids.includes(p.id)) : personas.filter(isRunnable);
   const unknown = ids.filter((id) => !personas.some((p) => p.id === id));
   if (unknown.length) throw new Error(`unknown persona: ${unknown.join(', ')}`);
+  if (flag('retriage')) {
+    const runs = chosen.map((persona) => ({ persona, ...listRuns(DATA, persona.id)[0] })).filter((r) => r.report);
+    const t = await triage(runs);
+    renderSite(DATA, personas);
+    setStatus('idle');
+    if (!flag('no-notify') && t && !t.skipped) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, triage: t, deploy: { head: 'разбор по доске' } }));
+    return;
+  }
   if (flag('reverify')) {
     // Re-check finished runs without walking the site again.
     const runs = [];
@@ -214,9 +242,10 @@ async function main() {
     prune(persona.id);
     renderSite(DATA, personas);
   }
+  const t = await triage(runs);
   renderSite(DATA, personas);
   setStatus('idle');
-  if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision }));
+  if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, decision, triage: t }));
 }
 
 /**
@@ -246,7 +275,9 @@ async function runQueue(personas) {
             prune(persona.id);
             renderSite(DATA, personas);
           }
-          if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision, deploy: { head: 'ручной запуск со страницы' } }));
+          const t = await triage(runs);
+          renderSite(DATA, personas);
+          if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, decision, deploy: { head: 'ручной запуск со страницы' }, triage: t }));
         }
       }
       dropJobs(queueDir, [manual]);
@@ -294,10 +325,12 @@ ${plan.error.slice(0, 200)}`);
       prune(persona.id);
       renderSite(DATA, personas);
     }
+    const t = await triage(runs);
+    renderSite(DATA, personas);
     dropJobs(queueDir, jobs);
     currentJobs = [];
     setStatus('idle');
-    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL, decision, deploy: { head, summary: plan.summary } }));
+    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, decision, deploy: { head, summary: plan.summary }, triage: t }));
   }
 }
 

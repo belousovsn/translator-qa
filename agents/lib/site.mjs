@@ -82,13 +82,17 @@ function renderRun(run, i, k = { items: [] }) {
       return `<div class="decision">Известно: ${esc(f.known ?? '')}${item?.issue ? ` · <a href="${esc(item.issue.url)}">#${item.issue.number}</a>` : ''}</div>`;
     }
     const d = decisionFor(k, run.rel, f.id);
+    const btn = (kind, label) => `<button type="button" data-decide="${kind}" data-run-rel="${esc(run.rel)}" data-finding="${esc(f.id)}">${label}</button>`;
+    const buttons = `<div class="decide">${btn('issue', 'В задачу')}${btn('accepted', 'Норма')}${btn('not-bug', 'Не баг')}</div>`;
     if (d) {
+      const who = d.by === 'triage' ? 'Разборщик' : 'Решение';
       const what = d.kind === 'issue' && d.issue ? `в задаче <a href="${esc(d.issue.url)}">#${d.issue.number}</a>${d.issue.state === 'closed' ? ' (закрыта)' : ''}` : esc(DECISIONS[d.kind]);
-      return `<div class="decision">Решение: ${what} · ${esc(d.id)} <button type="button" class="link" data-undo="${esc(d.id)}">отменить</button></div>`;
+      const why = d.reason ? `<div class="muted">${esc(d.reason)}</div>` : '';
+      // A triage "not worth an issue" stays open to Sergey's own decision.
+      return `<div class="decision">${who}: ${what} · ${esc(d.id)} <button type="button" class="link" data-undo="${esc(d.id)}">отменить</button>${why}</div>${d.kind === 'skipped' ? buttons : ''}`;
     }
     if (!isShown(f)) return '';
-    const btn = (kind, label) => `<button type="button" data-decide="${kind}" data-run-rel="${esc(run.rel)}" data-finding="${esc(f.id)}">${label}</button>`;
-    return `<div class="decide">${btn('issue', 'В задачу')}${btn('accepted', 'Норма')}${btn('not-bug', 'Не баг')}</div>`;
+    return buttons;
   };
   const renderFinding = (f) => {
     // Agents name some shots finding-Fn.png; others keep the MCP's own name in out/.
@@ -134,7 +138,7 @@ function renderKnowledge(k) {
     .map((i) => {
       const where = [i.where?.screen, i.where?.element].filter(Boolean).join(' · ');
       const what = i.kind === 'issue' && i.issue ? `<a href="${esc(i.issue.url)}">#${i.issue.number}</a>${i.issue.state === 'closed' ? ' закрыта' : ''}` : esc(DECISIONS[i.kind]);
-      return `<li><strong>${esc(i.id)}</strong> ${what} · ${where ? `${esc(where)}: ` : ''}${esc(i.observed)} <button type="button" class="link" data-undo="${esc(i.id)}">отменить</button></li>`;
+      return `<li><strong>${esc(i.id)}</strong> ${what}${i.by === 'triage' ? ' <span class="muted">(разборщик)</span>' : ''} · ${where ? `${esc(where)}: ` : ''}${esc(i.observed)} <button type="button" class="link" data-undo="${esc(i.id)}">отменить</button></li>`;
     })
     .join('');
   return `<details class="knowledge"><summary>Решения по находкам (${k.items.length})</summary><ul>${rows}</ul></details>`;

@@ -12,7 +12,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, openSync, readFileSync } from 'node:fs';
-import { addItem, decisionFor, DECISIONS, github, issueFromFinding, loadKnowledge, removeItem, saveKnowledge } from './lib/knowledge.mjs';
+import { addItem, decisionFor, USER_DECISIONS, github, issueFromFinding, loadKnowledge, removeItem, saveKnowledge } from './lib/knowledge.mjs';
 import { renderSite } from './lib/site.mjs';
 import { mergeFindings } from './lib/verify.mjs';
 import http from 'node:http';
@@ -69,7 +69,7 @@ function decide(body) {
 }
 
 async function decideNow({ run, finding: findingId, decision }) {
-  if (!DECISIONS[decision]) throw fail(400, 'unknown decision');
+  if (!USER_DECISIONS.includes(decision)) throw fail(400, 'unknown decision');
   if (typeof run !== 'string' || !/^runs\/[a-z0-9-]+\/[0-9TZ-]+$/.test(run)) throw fail(400, 'bad run');
   const dir = path.join(DATA, run);
   const report = readJson(path.join(dir, 'report.json'));
@@ -79,7 +79,9 @@ async function decideNow({ run, finding: findingId, decision }) {
   if (!finding) throw fail(404, 'no such finding');
   const k = loadKnowledge(DATA);
   const existing = decisionFor(k, run, findingId);
-  if (existing) return { item: existing, already: true };
+  // Sergey overrules the triage agent's "not worth an issue"; any other decision is undone first.
+  if (existing?.kind === 'skipped') removeItem(k, existing.id);
+  else if (existing) return { item: existing, already: true };
   const persona = loadPersonas(path.join(here, 'personas')).find((p) => p.id === meta.persona) ?? { name: meta.persona, device: '?', locale: '?' };
   let issue = null;
   if (decision === 'issue') {

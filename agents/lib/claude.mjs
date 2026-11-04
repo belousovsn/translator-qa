@@ -6,6 +6,7 @@ export const MODELS = {
   probe: process.env.QA_AGENTS_PROBE_MODEL ?? 'claude-haiku-5-5',
   verify: process.env.QA_AGENTS_VERIFY_MODEL ?? 'claude-opus-5-5',
   planner: process.env.QA_AGENTS_PLANNER_MODEL ?? 'claude-opus-5-5',
+  triage: process.env.QA_AGENTS_TRIAGE_MODEL ?? 'claude-opus-5-5',
 };
 
 const CLAUDE = process.env.CLAUDE_BIN ?? 'claude';
