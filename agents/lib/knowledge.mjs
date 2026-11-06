@@ -10,14 +10,14 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-//   skipped  — the triage agent decided it is not worth an issue. Not shown to
-//              the personas; Sergey can still overrule it on the page.
+//   skipped  — not worth an issue. Not shown to the personas. When the triage
+//              agent decided it, the finding still waits for Sergey on the page.
 //
 // Items the triage agent made carry by: 'triage' and its reason.
 
 export const DECISIONS = { issue: 'в задаче', accepted: 'норма', 'not-bug': 'не баг', skipped: 'не заводить' };
 /** Decisions Sergey makes with the page buttons. */
-export const USER_DECISIONS = ['issue', 'accepted', 'not-bug'];
+export const USER_DECISIONS = ['issue', 'skipped', 'accepted', 'not-bug'];
 
 const file = (dataDir) => path.join(dataDir, 'knowledge.json');
 

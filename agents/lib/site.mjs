@@ -38,6 +38,44 @@ export function listRuns(dataDir, personaId) {
 }
 
 const SEVERITY = { high: 'серьёзно', medium: 'средне', low: 'мелочь' };
+const ORDER = { high: 0, medium: 1, low: 2 };
+
+/**
+ * A finding still waits for Sergey: nobody decided it, or only the triage
+ * agent said "not worth an issue". Issues and duplicates the triage agent
+ * filed are on the board and do not wait.
+ */
+export function isPending(k, run, f) {
+  if (!isShown(f) || f.verdict === 'known') return false;
+  const d = decisionFor(k, run.rel, f.id);
+  return !d || (d.kind === 'skipped' && d.by === 'triage');
+}
+
+/** Every finding that waits for Sergey, in every kept run, worst and newest first. */
+export function pendingFindings(dataDir, personas, k = loadKnowledge(dataDir)) {
+  const out = [];
+  for (const p of personas) {
+    for (const run of listRuns(dataDir, p.id)) {
+      if (!run.report) continue;
+      for (const f of mergeFindings(run.report, run.verify)) {
+        if (isPending(k, run, f)) out.push({ persona: p, run, finding: f, decision: decisionFor(k, run.rel, f.id) });
+      }
+    }
+  }
+  return out.sort((a, b) => (ORDER[a.finding.severity] ?? 3) - (ORDER[b.finding.severity] ?? 3) || b.run.meta.startedAt.localeCompare(a.run.meta.startedAt));
+}
+
+/** Runs older than the last KEEP_RUNS that may go: none of their findings waits for Sergey. */
+export function prunableRuns(dataDir, personaId, k = loadKnowledge(dataDir)) {
+  return listRuns(dataDir, personaId)
+    .slice(KEEP_RUNS)
+    .filter((run) => !run.report || !mergeFindings(run.report, run.verify).some((f) => isPending(k, run, f)));
+}
+
+const decideButtons = (run, f) => {
+  const btn = (kind, label) => `<button type="button" data-decide="${kind}" data-run-rel="${esc(run.rel)}" data-finding="${esc(f.id)}">${label}</button>`;
+  return `<div class="decide">${btn('issue', 'В задачу')}${btn('skipped', 'Пропустить')}${btn('accepted', 'Норма')}${btn('not-bug', 'Не баг')}</div>`;
+};
 const STATUS = { ok: 'готово', 'no-report': 'нет отчёта', error: 'ошибка', limit: 'лимит' };
 
 const fmtDate = (iso) => {
@@ -82,14 +120,13 @@ function renderRun(run, i, k = { items: [] }) {
       return `<div class="decision">Известно: ${esc(f.known ?? '')}${item?.issue ? ` · <a href="${esc(item.issue.url)}">#${item.issue.number}</a>` : ''}</div>`;
     }
     const d = decisionFor(k, run.rel, f.id);
-    const btn = (kind, label) => `<button type="button" data-decide="${kind}" data-run-rel="${esc(run.rel)}" data-finding="${esc(f.id)}">${label}</button>`;
-    const buttons = `<div class="decide">${btn('issue', 'В задачу')}${btn('accepted', 'Норма')}${btn('not-bug', 'Не баг')}</div>`;
+    const buttons = decideButtons(run, f);
     if (d) {
       const who = d.by === 'triage' ? 'Разборщик' : 'Решение';
       const what = d.kind === 'issue' && d.issue ? `в задаче <a href="${esc(d.issue.url)}">#${d.issue.number}</a>${d.issue.state === 'closed' ? ' (закрыта)' : ''}` : esc(DECISIONS[d.kind]);
       const why = d.reason ? `<div class="muted">${esc(d.reason)}</div>` : '';
       // A triage "not worth an issue" stays open to Sergey's own decision.
-      return `<div class="decision">${who}: ${what} · ${esc(d.id)} <button type="button" class="link" data-undo="${esc(d.id)}">отменить</button>${why}</div>${d.kind === 'skipped' ? buttons : ''}`;
+      return `<div class="decision">${who}: ${what} · ${esc(d.id)} <button type="button" class="link" data-undo="${esc(d.id)}">отменить</button>${why}</div>${d.kind === 'skipped' && d.by === 'triage' ? buttons : ''}`;
     }
     if (!isShown(f)) return '';
     return buttons;
@@ -132,6 +169,24 @@ function renderRun(run, i, k = { items: [] }) {
   </details>`;
 }
 
+function renderPending(items) {
+  if (!items.length) return '<section class="pending" id="pending"><h2>Ждут решения</h2><p class="muted">Ничего не ждёт.</p></section>';
+  const rows = items
+    .map(({ persona, run, finding: f, decision: d }) => {
+      const w = f.where ?? {};
+      const place = [w.screen, w.element].filter(Boolean).join(' · ');
+      const triage = d ? `<div class="muted">Разборщик предлагает не заводить: ${esc(d.reason ?? '')}</div>` : '';
+      return `<li class="finding sev-${esc(f.severity)}">
+        <div><span class="badge">${esc(SEVERITY[f.severity] ?? f.severity)}</span> <strong>${esc(persona.name.split(',')[0])}</strong> <span class="muted">${esc(fmtDate(run.meta.startedAt))}</span> <a href="#${esc(anchor(run, f.id))}" class="muted">подробнее</a></div>
+        <div>${place ? `${esc(place)}: ` : ''}${esc(f.observed)}</div>
+        ${triage}
+        ${decideButtons(run, f)}
+      </li>`;
+    })
+    .join('');
+  return `<section class="pending" id="pending"><h2>Ждут решения (${items.length})</h2><div class="muted">Находки всех прогонов, по которым ты ещё не решил. Прогон с такой находкой не удаляется.</div><ul class="findings">${rows}</ul></section>`;
+}
+
 function renderKnowledge(k) {
   if (!k.items.length) return '';
   const rows = k.items
@@ -149,7 +204,8 @@ export function renderSite(dataDir, personas) {
   // Personas that can run come first; the ones waiting for accounts sink.
   const sections = [...personas.filter(isRunnable), ...personas.filter((p) => !isRunnable(p))]
     .map((p) => {
-      const runs = listRuns(dataDir, p.id).slice(0, KEEP_RUNS);
+      // Older runs are only still here when a finding in them waits for a decision.
+      const runs = listRuns(dataDir, p.id);
       const sub = `${esc(p.device)} · ${esc(p.locale)} · ${esc(p.colorScheme ?? 'light')}`;
       const body = !isRunnable(p)
         ? '<p class="muted">Ждёт тестовых аккаунтов.</p>'
@@ -206,6 +262,7 @@ ul,ol { padding-left:20px; margin:4px 0; }
 .deploy { font-size:14px; background:var(--tag); border-radius:6px; padding:6px 10px; margin-top:8px; } .where { font-size:14px; }
 .decide { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; } .decide button, .knowledge button { font:inherit; font-size:13px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:6px; padding:3px 10px; cursor:pointer; } .decide button:hover { border-color:var(--muted); }
 .decision { margin-top:8px; font-size:14px; color:var(--muted); } button.link { font:inherit; font-size:13px; background:none; border:none; padding:0; color:var(--accent); text-decoration:underline; cursor:pointer; }
+.pending { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-top:12px; } .pending .finding { margin:10px 0; }
 .knowledge { margin-top:12px; } .knowledge li { margin:4px 0; } .finding:target { background:var(--tag); }
 .finding img { display:block; max-width:100%; max-height:320px; margin-top:6px; border:1px solid var(--line); border-radius:6px; }
 .links { display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; } a { color:var(--accent); }
@@ -214,8 +271,9 @@ details:not(.persona):not(.run) > summary::before { content:'▸ '; color:var(--
 </style></head>
 <body><main>
 <h1>QA-агенты</h1>
-<div class="muted">Последние ${KEEP_RUNS} прогона каждого персонажа. Обновлено ${esc(fmtDate(new Date().toISOString()))}.</div>
+<div class="muted">Последние ${KEEP_RUNS} прогона каждого персонажа и старые, где что-то ждёт решения. Обновлено ${esc(fmtDate(new Date().toISOString()))}.</div>
 <div class="status" id="status" hidden></div>
+${renderPending(pendingFindings(dataDir, personas.filter(isRunnable), k))}
 ${renderKnowledge(k)}
 <div class="toolbar"><button type="button" class="primary" data-run="all">Запустить всех гостей</button><button type="button" data-all="open">Развернуть всех</button><button type="button" data-all="close">Свернуть всех</button></div>
 ${sections}

@@ -4,7 +4,7 @@
 //
 //   GET  /agents/api/status   what the runner is doing and what waits in the queue
 //   POST /agents/api/run      {"personas": ["guest-ru-phone"]}  queue a manual run
-//   POST /agents/api/decide   {"run": "runs/<persona>/<time>", "finding": "F2", "decision": "issue|accepted|not-bug"}
+//   POST /agents/api/decide   {"run": "runs/<persona>/<time>", "finding": "F2", "decision": "issue|skipped|accepted|not-bug"}
 //   POST /agents/api/undo     {"id": "K3"}
 //
 // It only writes a job file and wakes the worker; the run itself goes through
@@ -79,8 +79,9 @@ async function decideNow({ run, finding: findingId, decision }) {
   if (!finding) throw fail(404, 'no such finding');
   const k = loadKnowledge(DATA);
   const existing = decisionFor(k, run, findingId);
-  // Sergey overrules the triage agent's "not worth an issue"; any other decision is undone first.
-  if (existing?.kind === 'skipped') removeItem(k, existing.id);
+  // Sergey confirms or overrules the triage agent's "not worth an issue"; any other decision is undone first.
+  const triageSkip = existing?.kind === 'skipped' && existing.by === 'triage' ? existing : null;
+  if (triageSkip) removeItem(k, triageSkip.id);
   else if (existing) return { item: existing, already: true };
   const persona = loadPersonas(path.join(here, 'personas')).find((p) => p.id === meta.persona) ?? { name: meta.persona, device: '?', locale: '?' };
   let issue = null;
@@ -88,7 +89,7 @@ async function decideNow({ run, finding: findingId, decision }) {
     const created = await github().createIssue(issueFromFinding({ finding, persona, runRel: run, pageUrl: process.env.QA_AGENTS_PAGE_URL }));
     issue = { number: created.number, url: created.html_url, state: created.state };
   }
-  const item = addItem(k, { kind: decision, finding, runRel: run, persona: meta.persona, issue });
+  const item = addItem(k, { kind: decision, finding, runRel: run, persona: meta.persona, issue, reason: decision === 'skipped' ? triageSkip?.reason : null });
   saveKnowledge(DATA, k);
   return { item };
 }

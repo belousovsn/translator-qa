@@ -26,7 +26,7 @@ import { planEvents } from './lib/events.mjs';
 import { sendTelegram, summarize } from './lib/notify.mjs';
 import { isRunnable, loadPersonas, SECRETS_FILE } from './lib/personas.mjs';
 import { buildPrompt, extractReport } from './lib/prompt.mjs';
-import { KEEP_RUNS, listRuns, renderSite } from './lib/site.mjs';
+import { listRuns, pendingFindings, prunableRuns, renderSite } from './lib/site.mjs';
 import { verifyRun } from './lib/verify.mjs';
 import { writeMockFiles } from './lib/game-mock.mjs';
 import { describeKnowledge, github, loadKnowledge, refreshIssues } from './lib/knowledge.mjs';
@@ -92,8 +92,11 @@ function zipDir(srcDir, zipFile) {
   else execFileSync('zip', ['-q', '-r', zipFile, '.'], { cwd: srcDir });
 }
 
+// How many findings across all kept runs still wait for Sergey's decision.
+const pendingCount = () => pendingFindings(DATA, loadPersonas(path.join(here, 'personas')).filter(isRunnable)).length;
+
 function prune(personaId) {
-  for (const old of listRuns(DATA, personaId).slice(KEEP_RUNS)) rmSync(old.dir, { recursive: true, force: true });
+  for (const old of prunableRuns(DATA, personaId)) rmSync(old.dir, { recursive: true, force: true });
 }
 
 async function waitForLimit() {
@@ -203,7 +206,7 @@ async function main() {
     const t = await triage(runs);
     renderSite(DATA, personas);
     setStatus('idle');
-    if (!flag('no-notify') && t && !t.skipped) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, triage: t, deploy: { head: 'разбор по доске' } }));
+    if (!flag('no-notify') && t && !t.skipped) await sendTelegram(summarize(runs, { pending: pendingCount(), pageUrl: PAGE_URL, triage: t, deploy: { head: 'разбор по доске' } }));
     return;
   }
   if (flag('reverify')) {
@@ -217,7 +220,7 @@ async function main() {
       runs.push({ persona, meta: last.meta, report: last.report, verify, rel: last.rel });
     }
     renderSite(DATA, personas);
-    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: process.env.QA_AGENTS_PAGE_URL }));
+    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pending: pendingCount(), pageUrl: PAGE_URL }));
     return;
   }
   // Closed issues become places to look at again.
@@ -245,7 +248,7 @@ async function main() {
   const t = await triage(runs);
   renderSite(DATA, personas);
   setStatus('idle');
-  if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, decision, triage: t }));
+  if (!flag('no-notify')) await sendTelegram(summarize(runs, { pending: pendingCount(), pageUrl: PAGE_URL, decision, triage: t }));
 }
 
 /**
@@ -277,7 +280,7 @@ async function runQueue(personas) {
           }
           const t = await triage(runs);
           renderSite(DATA, personas);
-          if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, decision, deploy: { head: 'ручной запуск со страницы' }, triage: t }));
+          if (!flag('no-notify')) await sendTelegram(summarize(runs, { pending: pendingCount(), pageUrl: PAGE_URL, decision, deploy: { head: 'ручной запуск со страницы' }, triage: t }));
         }
       }
       dropJobs(queueDir, [manual]);
@@ -330,7 +333,7 @@ ${plan.error.slice(0, 200)}`);
     dropJobs(queueDir, jobs);
     currentJobs = [];
     setStatus('idle');
-    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pageUrl: PAGE_URL, decision, deploy: { head, summary: plan.summary }, triage: t }));
+    if (!flag('no-notify')) await sendTelegram(summarize(runs, { pending: pendingCount(), pageUrl: PAGE_URL, decision, deploy: { head, summary: plan.summary }, triage: t }));
   }
 }
 
