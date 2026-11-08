@@ -10,7 +10,14 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-export const DECISIONS = { issue: 'в задаче', accepted: 'норма', 'not-bug': 'не баг' };
+//   skipped  — not worth an issue. Not shown to the personas. When the triage
+//              agent decided it, the finding still waits for Sergey on the page.
+//
+// Items the triage agent made carry by: 'triage' and its reason.
+
+export const DECISIONS = { issue: 'в задаче', accepted: 'норма', 'not-bug': 'не баг', skipped: 'не заводить' };
+/** Decisions Sergey makes with the page buttons. */
+export const USER_DECISIONS = ['issue', 'skipped', 'accepted', 'not-bug'];
 
 const file = (dataDir) => path.join(dataDir, 'knowledge.json');
 
@@ -34,7 +41,7 @@ const nextId = (k) => `K${k.items.reduce((m, i) => Math.max(m, Number(i.id.slice
 export const decisionFor = (k, runRel, findingId) =>
   k.items.find((i) => i.source?.run === runRel && i.source?.finding === findingId) ?? null;
 
-export function addItem(k, { kind, finding, runRel, persona, issue = null }) {
+export function addItem(k, { kind, finding, runRel, persona, issue = null, by = 'sergey', reason = null }) {
   const item = {
     id: nextId(k),
     kind,
@@ -44,6 +51,8 @@ export function addItem(k, { kind, finding, runRel, persona, issue = null }) {
     where: finding.where ?? null,
     issue,
     source: { run: runRel, finding: finding.id, persona },
+    by,
+    ...(reason ? { reason } : {}),
     at: new Date().toISOString(),
   };
   k.items.push(item);
@@ -74,22 +83,37 @@ export function describeKnowledge(k, { forVerifier = false } = {}) {
   return parts.length ? `# Что уже известно\n\n${parts.join('\n\n')}` : '';
 }
 
-/** Minimal GitHub REST client; the token needs Issues read and write on one repo. */
+/** Minimal GitHub client; the token needs Issues read and write on one repo. */
 export function github({ token = process.env.QA_AGENTS_GITHUB_TOKEN, repo = process.env.QA_AGENTS_GITHUB_REPO } = {}) {
-  const call = async (method, url, body) => {
+  const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'content-type': 'application/json' };
+  const send = async (method, url, body) => {
     if (!token || !repo) throw new Error('на сервере нет QA_AGENTS_GITHUB_TOKEN или QA_AGENTS_GITHUB_REPO');
-    const res = await fetch(`https://api.github.com/repos/${repo}${url}`, {
-      method,
-      headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'content-type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     if (!res.ok) throw new Error(`GitHub ответил ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return res.json();
   };
+  const call = (method, url, body) => send(method, `https://api.github.com/repos/${repo}${url}`, body);
+  const paged = async (url) => {
+    const out = [];
+    for (let page = 1; page <= 20; page += 1) {
+      const items = await call('GET', `${url}${url.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+      out.push(...items);
+      if (items.length < 100) break;
+    }
+    return out;
+  };
   return {
     configured: Boolean(token && repo),
+    repo,
     createIssue: (issue) => call('POST', '/issues', issue),
     getIssue: (n) => call('GET', `/issues/${n}`),
+    listIssues: (query) => paged(`/issues?${query}`),
+    listLabels: () => paged('/labels'),
+    graphql: async (query, variables) => {
+      const out = await send('POST', 'https://api.github.com/graphql', { query, variables });
+      if (out.errors?.length) throw new Error(`GitHub GraphQL: ${out.errors[0].message}`);
+      return out.data;
+    },
   };
 }
 

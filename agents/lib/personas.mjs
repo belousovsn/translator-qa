@@ -24,7 +24,30 @@ export function loadPersonas(dir) {
     .map((f) => parsePersona(path.join(dir, f)));
 }
 
-/** Personas that need test accounts wait until accounts are provisioned (#747). */
+// Which test accounts a persona signs in with: names of QA_<KEY>_EMAIL and
+// QA_<KEY>_PASSWORD in the secrets file. The persona types these names; the
+// browser tool puts in the real values, so the model never sees a password.
+export const ACCOUNTS = {
+  guest: [],
+  veteran: ['VETERAN'],
+  signin: ['SIGNIN'],
+  pair: ['PAIR_A', 'PAIR_B'],
+};
+
+export const SECRETS_FILE = process.env.QA_AGENTS_SECRETS ?? '/var/lib/qa-agents/secrets.env';
+
+function secretNames() {
+  try {
+    return new Set(readFileSync(SECRETS_FILE, 'utf8').split('\n').map((l) => l.slice(0, l.indexOf('='))).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+/** A persona runs when it is a guest or every account it needs is in the secrets file. */
 export function isRunnable(persona) {
-  return persona.account === 'guest';
+  const keys = ACCOUNTS[persona.account];
+  if (!keys) return false;
+  const names = secretNames();
+  return keys.every((k) => names.has(`QA_${k}_EMAIL`) && names.has(`QA_${k}_PASSWORD`));
 }
