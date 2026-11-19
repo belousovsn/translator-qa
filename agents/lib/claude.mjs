@@ -18,25 +18,41 @@ const CLAUDE = process.env.CLAUDE_BIN ?? 'claude';
  */
 export function runClaude({ prompt, model, cwd, args = [], logFile, env = {}, timeoutMs }) {
   return new Promise((resolve) => {
-    const cliArgs = ['-p', prompt, '--model', model, '--output-format', 'stream-json', '--verbose', ...args];
+    // The prompt goes in on stdin: Linux caps one argument at 128 KB, and a
+    // deploy diff with Cyrillic text passed it, so spawn threw E2BIG and the
+    // queue stalled from 6 to 19 November 2026.
+    const cliArgs = ['-p', '--model', model, '--output-format', 'stream-json', '--verbose', ...args];
     // A .mjs CLAUDE_BIN is a local stand-in used to test the runner without a subscription.
     const [cmd, argv] = /\.m?js$/.test(CLAUDE) ? [process.execPath, [CLAUDE, ...cliArgs]] : [CLAUDE, cliArgs];
-    const child = spawn(
-      cmd,
-      argv,
-      {
-        cwd,
-        env: {
-          ...process.env,
-          // Wait out a usage limit inside the run instead of failing the persona.
-          CLAUDE_CODE_RETRY_WATCHDOG: '1',
-          CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS: '600000',
-          CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: String(5.5 * 3600 * 1000),
-          ...env,
+    const failed = (err) =>
+      resolve({ code: null, text: '', isError: true, numTurns: null, durationMs: null, rateLimits: [], stderr: err.message });
+    let child;
+    try {
+      child = spawn(
+        cmd,
+        argv,
+        {
+          cwd,
+          env: {
+            ...process.env,
+            // Wait out a usage limit inside the run instead of failing the persona.
+            CLAUDE_CODE_RETRY_WATCHDOG: '1',
+            CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS: '600000',
+            CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: String(5.5 * 3600 * 1000),
+            ...env,
+          },
+          stdio: ['pipe', 'pipe', 'pipe'],
         },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
+      );
+    } catch (err) {
+      failed(err);
+      return;
+    }
+    // A missing binary arrives as an 'error' event, not a throw; 'close' may not follow.
+    child.on('error', failed);
+    // The CLI may exit before reading all of stdin; the exit code tells the story then.
+    child.stdin.on('error', () => {});
+    child.stdin.end(prompt);
     const log = logFile ? createWriteStream(logFile) : null;
     const rateLimits = [];
     let result = null;
