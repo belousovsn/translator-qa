@@ -262,18 +262,40 @@ test.describe('public SEO surface', () => {
         await appPage.close()
     })
 
+    // The site grows with every SEO release, so the sitemap is not compared with a
+    // fixed count: the routes above must be in it, and every page it lists must be
+    // a live canonical page with the same metadata the per-route test asks for.
     test('sitemap contains only canonical pages that return 200', async ({ request }) => {
+        test.setTimeout(120_000)
         const sitemap = await request.get('/sitemap.xml')
         expect(sitemap.status()).toBe(200)
         const body = await sitemap.text()
         const urls = [...body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
-        expect(urls).toHaveLength(allIndexableRoutes.length)
         expect(body).not.toMatch(/\/admin|\/api\/|reset-password|[?#].*<\/loc>/)
 
-        for (const url of urls) {
+        const listed = new Set(urls.map((url) => new URL(url).pathname))
+        expect(allIndexableRoutes.filter((route) => !listed.has(route)), 'routes missing from the sitemap').toEqual([])
+
+        const problems: string[] = []
+        const check = async (url: string) => {
             const response = await request.get(new URL(url).pathname)
-            expect(response.status(), url).toBe(200)
+            if (response.status() !== 200) {
+                problems.push(`${url}: status ${response.status()}`)
+                return
+            }
+            const html = await response.text()
+            const attr = (pattern: RegExp) => html.match(pattern)?.[1] ?? ''
+            if (attr(/<link rel="canonical" href="([^"]*)"/) !== url) problems.push(`${url}: canonical is not the sitemap URL`)
+            if ((html.match(/<h1[\s>]/g) ?? []).length !== 1) problems.push(`${url}: not exactly one h1`)
+            if (!/<title[^>]*>[^<]+<\/title>/.test(html)) problems.push(`${url}: empty title`)
+            if (attr(/<meta name="description" content="([^"]*)"/).length < 40) problems.push(`${url}: description shorter than 40 characters`)
+            if (!/memdecks-social\.png$/.test(attr(/<meta property="og:image" content="([^"]*)"/))) problems.push(`${url}: wrong og:image`)
+            if (attr(/<meta name="twitter:card" content="([^"]*)"/) !== 'summary_large_image') problems.push(`${url}: wrong twitter:card`)
         }
+        for (let i = 0; i < urls.length; i += 8) {
+            await Promise.all(urls.slice(i, i + 8).map(check))
+        }
+        expect(problems).toEqual([])
     })
 
     test('clean support aliases redirect once to their canonical URL', async ({ request }) => {
