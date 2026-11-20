@@ -25,8 +25,9 @@ export function contextOptions(persona) {
 /**
  * Writes the Playwright MCP config and the Claude MCP config for one run.
  * Screenshots with an explicit name land in the run folder, the rest in out/.
+ * The secrets file stays outside the run folder, which the page serves.
  */
-export function writeMcpConfig(runDir, persona) {
+export function writeMcpConfig(runDir, persona, { secretsFile = null } = {}) {
   const pwConfig = {
     browser: {
       browserName: 'chromium',
@@ -44,7 +45,7 @@ export function writeMcpConfig(runDir, persona) {
     mcpServers: {
       browser: {
         command: process.execPath,
-        args: [MCP_CLI, '--config', pwConfigPath, '--caps', 'devtools,network'],
+        args: [MCP_CLI, '--config', pwConfigPath, '--caps', 'devtools,network', ...(secretsFile ? ['--secrets', secretsFile] : [])],
       },
     },
   };

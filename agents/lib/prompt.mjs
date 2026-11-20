@@ -1,5 +1,19 @@
 import { describePlan } from './events.mjs';
 import { describeGames } from './game-mock.mjs';
+import { ACCOUNTS } from './personas.mjs';
+
+/** How the persona signs in without ever seeing a password. */
+function describeAccounts(persona) {
+  const keys = ACCOUNTS[persona.account] ?? [];
+  if (!keys.length) return '';
+  const list = keys.map((k) => `- почта \`QA_${k}_EMAIL\`, пароль \`QA_${k}_PASSWORD\``).join('\n');
+  return `# Вход в аккаунт
+
+У тебя ${keys.length === 1 ? 'есть аккаунт' : 'есть аккаунты'}:
+${list}
+
+Это не сами значения, а их имена. Чтобы войти, открой окно входа в приложении и введи в поле Email через browser_type ровно текст с именем почты, а в поле Password ровно текст с именем пароля. Браузер подставит настоящие значения сам, в ответах ты увидишь <secret>…</secret>. Не пытайся узнать настоящие значения и не пиши их в отчёт. Аккаунт живой: в нём уже есть карточки и прогресс, его не сбрасывают между прогонами.`;
+}
 
 export const REPORT_START = '<<<REPORT';
 export const REPORT_END = 'REPORT>>>';
@@ -15,6 +29,8 @@ export function buildPrompt({ persona, baseUrl, rules, accepted, plan, maxAction
 ${persona.name}. Устройство: ${persona.device}. Язык браузера: ${persona.locale}. Тема: ${persona.colorScheme ?? 'light'}. ${persona.account === 'guest' ? 'Аккаунта нет, ты гость.' : ''}
 
 ${persona.body}
+
+${describeAccounts(persona)}
 
 Веди себя как этот человек: выбирай путь сам, ошибайся так, как ошибался бы он, бросай то, что ему надоело бы. Ты не проверяешь заранее заданный список. Ты живёшь в приложении и замечаешь, что не так.
 

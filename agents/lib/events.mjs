@@ -38,7 +38,10 @@ export const EVENTS = {
     label: 'отошёл на час',
     how: [
       'Вызови browser_run_code_unsafe с кодом:',
-      '`async (page) => { await page.clock.install(); await page.clock.fastForward("01:00:00"); return "an hour later"; }`',
+      // Timers fire as if an hour passed, then the page clock returns to real time:
+      // a clock left an hour ahead makes every fresh session token look expired and
+      // sends the client into a refresh loop no real user would see.
+      '`async (page) => { await page.clock.install(); await page.clock.fastForward("01:00:00"); await page.clock.setSystemTime(Date.now()); return "an hour later, clock back to real time"; }`',
       'Продолжи с того же места, как человек, который вернулся к телефону через час.',
     ],
   },
