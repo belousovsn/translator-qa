@@ -29,7 +29,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { GROUPS, publicGroups } from './groups.mjs';
+import { GROUPS, publicGroups, groupProject, singleTestArgs } from './groups.mjs';
 
 // Load .env if present (dotenv is a dev dependency of this repo). Never fatal.
 try {
@@ -95,6 +95,12 @@ let globalHits = [];
 
 /** group id -> number of tests (computed once via `--list`). */
 const groupCounts = {};
+/**
+ * group id -> the group's tests from `--list` ({ id, title, context, file, line }).
+ * A visitor picks a single test by id; file/line/title come from here.
+ * @type {Record<string, Array<{id:string,title:string,context:string,file:string,line:number}>>}
+ */
+const groupTests = {};
 
 const MAX_BUFFERED_EVENTS = 3000;
 
@@ -153,6 +159,7 @@ function publicRun(run) {
   return {
     id: run.id,
     group: run.group,
+    test: run.test,
     status: run.status,
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
@@ -229,20 +236,54 @@ async function pruneOldReports() {
   }
 }
 
-/** Count the tests in a group with `--list` (no browsers, no network). */
-function listCount(groupId) {
+/**
+ * Pull the spec list out of `--list --reporter=json`. Only specs that run under
+ * the group's own project count: the auth project's setup and teardown specs
+ * show up in the listing as dependencies but are not tests a visitor picks.
+ */
+function collectTests(json, project) {
+  const tests = [];
+  const walk = (suite, describes) => {
+    for (const spec of suite.specs ?? []) {
+      if (!spec.tests?.some((t) => t.projectName === project)) continue;
+      tests.push({
+        id: spec.id,
+        title: spec.title,
+        context: [spec.file, ...describes].join(' › '),
+        file: spec.file,
+        line: spec.line,
+      });
+    }
+    for (const child of suite.suites ?? []) walk(child, [...describes, child.title]);
+  };
+  // Top-level suites are files: spec.file already names them, so they add no
+  // describe title of their own.
+  for (const fileSuite of json.suites ?? []) walk(fileSuite, []);
+  // Source order, so the UI's picker reads like the spec files do.
+  return tests.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+}
+
+/** List the tests in a group with `--list` (no browsers, no network). */
+function listGroup(groupId) {
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      [PW_CLI, 'test', ...GROUPS[groupId].args, '--list'],
-      { cwd: ROOT, env: { ...process.env, CI: '1', FORCE_COLOR: '0' } },
+      [PW_CLI, 'test', ...GROUPS[groupId].args, '--list', '--reporter=json'],
+      {
+        cwd: ROOT,
+        env: { ...process.env, CI: '1', FORCE_COLOR: '0', DOTENV_CONFIG_QUIET: 'true' },
+      },
     );
     let out = '';
     child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (out += d));
     child.on('close', () => {
-      const m = out.match(/Total:\s+(\d+)\s+tests?/i);
-      resolve(m ? Number(m[1]) : null);
+      try {
+        // Anything printed before the JSON (a stray config log) is not ours.
+        const start = out.indexOf('{');
+        resolve(collectTests(JSON.parse(out.slice(start)), groupProject(groupId)));
+      } catch {
+        resolve(null);
+      }
     });
     child.on('error', () => resolve(null));
   });
@@ -255,14 +296,16 @@ async function refreshCounts() {
   // all groups' listings at once can breach the cgroup limit and OOM-kill the
   // runner in a restart loop. Sequential keeps the peak at ~one child + server.
   for (const id of ids) {
-    groupCounts[id] = await listCount(id);
+    const tests = await listGroup(id);
+    groupTests[id] = tests ?? [];
+    groupCounts[id] = tests ? tests.length : null;
   }
   console.log(
     `[runner] test counts: ${ids.map((id) => `${id}=${groupCounts[id] ?? '?'}`).join(', ')}`,
   );
 }
 
-function startRun(group, ip) {
+function startRun(group, ip, test) {
   const id = crypto.randomUUID();
   const runDir = path.join(RUNS_DIR, id);
   const reportDir = path.join(runDir, 'report');
@@ -272,6 +315,7 @@ function startRun(group, ip) {
   const run = {
     id,
     group,
+    test: test ? { id: test.id, title: test.title } : null,
     status: 'running',
     startedAt: nowIso(),
     finishedAt: null,
@@ -287,7 +331,8 @@ function startRun(group, ip) {
   subscribers.set(id, new Set());
   activeRunId = id;
 
-  const args = [PW_CLI, 'test', ...GROUPS[group].args, '--reporter=list,json,html'];
+  const selection = test ? singleTestArgs(group, test) : GROUPS[group].args;
+  const args = [PW_CLI, 'test', ...selection, '--reporter=list,json,html'];
   const child = spawn(process.execPath, args, {
     cwd: ROOT,
     env: {
@@ -301,8 +346,9 @@ function startRun(group, ip) {
     },
   });
 
-  broadcast(run, 'status', { status: 'running', group });
-  broadcast(run, 'log', { line: `▶ Running "${group}" against ${process.env.TEST_BASE_URL ?? '(TEST_BASE_URL unset)'}` });
+  broadcast(run, 'status', { status: 'running', group, test: run.test });
+  const what = test ? `"${group}" › ${test.title}` : `"${group}"`;
+  broadcast(run, 'log', { line: `▶ Running ${what} against ${process.env.TEST_BASE_URL ?? '(TEST_BASE_URL unset)'}` });
 
   // Buffer across chunks so a line split between two 'data' events isn't lost.
   let lineBuf = '';
@@ -455,6 +501,7 @@ const server = http.createServer(async (req, res) => {
     const groups = publicGroups().map((g) => ({
       ...g,
       count: groupCounts[g.id] ?? null,
+      tests: (groupTests[g.id] ?? []).map(({ id, title, context }) => ({ id, title, context })),
     }));
     return sendJson(res, 200, { groups }, origin);
   }
@@ -520,6 +567,15 @@ const server = http.createServer(async (req, res) => {
     if (!body || typeof body.group !== 'string' || !Object.hasOwn(GROUPS, body.group)) {
       return sendJson(res, 400, { error: 'Unknown or missing group' }, origin);
     }
+    // Optional single test: an id from this group's own listing, nothing else.
+    let test = null;
+    if (body.test !== undefined && body.test !== null && body.test !== '') {
+      test =
+        typeof body.test === 'string'
+          ? (groupTests[body.group] ?? []).find((t) => t.id === body.test)
+          : null;
+      if (!test) return sendJson(res, 400, { error: 'Unknown test' }, origin);
+    }
 
     // Rate limit (per-IP + global, sliding 1h window).
     const ip = clientIp(req);
@@ -535,7 +591,7 @@ const server = http.createServer(async (req, res) => {
     ipHits.set(ip, ipArr);
     globalHits.push(Date.now());
 
-    const run = startRun(body.group, ip);
+    const run = startRun(body.group, ip, test);
     return sendJson(res, 202, { runId: run.id }, origin);
   }
 
@@ -553,4 +609,4 @@ server.listen(CONFIG.port, CONFIG.host, () => {
 // Compute test counts in the background so /api/groups can show them.
 refreshCounts().catch((err) => console.warn('[runner] count refresh failed:', err.message));
 
-/** @typedef {{id:string,group:string,status:string,startedAt:string,finishedAt:string|null,ip:string,events:any[],tests:any[],summary:any,reportUrl:string|null,exitCode:number|null,runDir:string,timedOut?:boolean}} Run */
+/** @typedef {{id:string,group:string,test:{id:string,title:string}|null,status:string,startedAt:string,finishedAt:string|null,ip:string,events:any[],tests:any[],summary:any,reportUrl:string|null,exitCode:number|null,runDir:string,timedOut?:boolean}} Run */

@@ -136,6 +136,32 @@ export const GROUPS = {
   },
 };
 
+/** The Playwright project a group runs under (`--project=…` value). */
+export function groupProject(groupId) {
+  const arg = GROUPS[groupId].args.find((a) => a.startsWith('--project='));
+  return arg ? arg.slice('--project='.length) : null;
+}
+
+/**
+ * Args that run exactly one test of a group. `test` is an entry from the
+ * runner's own `--list` output (file, line, title), never visitor input: the
+ * visitor only sends its id, and the id is looked up in that list.
+ *
+ * `file:line` narrows to the declaration; the title grep separates tests that
+ * a loop declares on the same line. Playwright matches --grep against
+ * "project file describe… title tags" joined by spaces, so the pattern is
+ * bounded by spaces to keep "/ has x" from matching "/languages/ has x".
+ */
+export function singleTestArgs(groupId, test) {
+  const escaped = test.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [
+    `--project=${groupProject(groupId)}`,
+    `tests/${test.file}:${test.line}`,
+    '--grep',
+    `(?:^|\\s)${escaped}(?:\\s|$)`,
+  ];
+}
+
 /** Public, serialisable view of the groups for the UI (no internal args). */
 export function publicGroups() {
   return Object.entries(GROUPS).map(([id, g]) => ({
