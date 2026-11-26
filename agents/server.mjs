@@ -4,7 +4,7 @@
 //
 //   GET  /agents/api/status   what the runner is doing and what waits in the queue
 //   POST /agents/api/run      {"personas": ["guest-ru-phone"]}  queue a manual run
-//   POST /agents/api/decide   {"run": "runs/<persona>/<time>", "finding": "F2", "decision": "issue|accepted|not-bug"}
+//   POST /agents/api/decide   {"run": "runs/<persona>/<time>", "finding": "F2", "decision": "issue|skipped|accepted|not-bug"}
 //   POST /agents/api/undo     {"id": "K3"}
 //
 // It only writes a job file and wakes the worker; the run itself goes through
@@ -12,7 +12,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, openSync, readFileSync } from 'node:fs';
-import { addItem, decisionFor, DECISIONS, github, issueFromFinding, loadKnowledge, removeItem, saveKnowledge } from './lib/knowledge.mjs';
+import { addItem, decisionFor, USER_DECISIONS, github, issueFromFinding, loadKnowledge, removeItem, saveKnowledge } from './lib/knowledge.mjs';
 import { renderSite } from './lib/site.mjs';
 import { mergeFindings } from './lib/verify.mjs';
 import http from 'node:http';
@@ -69,7 +69,7 @@ function decide(body) {
 }
 
 async function decideNow({ run, finding: findingId, decision }) {
-  if (!DECISIONS[decision]) throw fail(400, 'unknown decision');
+  if (!USER_DECISIONS.includes(decision)) throw fail(400, 'unknown decision');
   if (typeof run !== 'string' || !/^runs\/[a-z0-9-]+\/[0-9TZ-]+$/.test(run)) throw fail(400, 'bad run');
   const dir = path.join(DATA, run);
   const report = readJson(path.join(dir, 'report.json'));
@@ -79,14 +79,17 @@ async function decideNow({ run, finding: findingId, decision }) {
   if (!finding) throw fail(404, 'no such finding');
   const k = loadKnowledge(DATA);
   const existing = decisionFor(k, run, findingId);
-  if (existing) return { item: existing, already: true };
+  // Sergey confirms or overrules the triage agent's "not worth an issue"; any other decision is undone first.
+  const triageSkip = existing?.kind === 'skipped' && existing.by === 'triage' ? existing : null;
+  if (triageSkip) removeItem(k, triageSkip.id);
+  else if (existing) return { item: existing, already: true };
   const persona = loadPersonas(path.join(here, 'personas')).find((p) => p.id === meta.persona) ?? { name: meta.persona, device: '?', locale: '?' };
   let issue = null;
   if (decision === 'issue') {
     const created = await github().createIssue(issueFromFinding({ finding, persona, runRel: run, pageUrl: process.env.QA_AGENTS_PAGE_URL }));
     issue = { number: created.number, url: created.html_url, state: created.state };
   }
-  const item = addItem(k, { kind: decision, finding, runRel: run, persona: meta.persona, issue });
+  const item = addItem(k, { kind: decision, finding, runRel: run, persona: meta.persona, issue, reason: decision === 'skipped' ? triageSkip?.reason : null });
   saveKnowledge(DATA, k);
   return { item };
 }
