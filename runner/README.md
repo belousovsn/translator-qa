@@ -21,6 +21,16 @@ specs — keep those tags in step with the group. Slower live-service groups
 (`auth`, `lobby`, `focus`) set a per-group `timeoutMs` that overrides the
 runner's default kill timeout.
 
+## Single test
+
+At startup the runner lists every group with `--list --reporter=json` and keeps
+each test's id, file, line and title. `/api/groups` sends the id, title and
+`file › describe` context; the visitor may send one id back as `test`. The
+runner looks the id up in its own list and runs
+`--project=<group's project> tests/<file>:<line> --grep <title>`. The grep
+separates tests that a loop declares on the same line. Setup and teardown
+projects still run as dependencies, so a signed-in test signs in first.
+
 ## Why it's safe to expose
 
 - **Allowlist only.** Visitors send a `group` id; the actual Playwright args
@@ -41,11 +51,11 @@ runner's default kill timeout.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Liveness + current active run id |
-| GET | `/api/groups` | Allowlisted groups (for the UI) |
+| GET | `/api/groups` | Allowlisted groups with their tests (for the UI) |
 | GET | `/api/latest` | Most recent finished run summary |
 | GET | `/api/run/:id` | Snapshot of a run |
 | GET | `/api/run/:id/stream` | SSE: `status`, `log`, `test`, `done` events (buffered + replayed) |
-| POST | `/api/run` | Start a run — body `{ "group": "unauth" }` → `202 { runId }` |
+| POST | `/api/run` | Start a run: body `{ "group": "unauth" }` → `202 { runId }`; add `"test": "<id>"` to run one test of the group |
 | GET | `/reports/:id/*` | Static Playwright HTML report for a run |
 
 ## Configuration (env)
